@@ -7,7 +7,7 @@ repository = "https://github.com/Markussorensen/molgen"
 documentation = "https://Markussorensen.github.io/molgen/"
 readme = "README.md"
 packages = [
-  {include = "molgen"}
+  {include = "src"}
 ]
 
 [tool.poetry.dependencies]
