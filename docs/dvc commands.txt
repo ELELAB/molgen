@@ -1,0 +1,17 @@
+TO ADD MODELS/DATA
+dvc add
+git add *folder*.dvc .gitignore
+git commit -m "*text*"
+git tag -a "v*version*" -m "data v*version*"
+dvc push
+git push
+
+TO GET MODELS/DATA
+git pull
+dvc pull
+
+
+
+TO GET BACK TO A PREVIOUS VERSION OF DATA/MODELS
+git checkout v1.0
+dvc checkout

@@ -1,0 +1,19 @@
+If you were to design a molecule generator where you could input target attributes, there are several important attributes that you might want to consider including. Here are some potential options:
+
+Molecular weight: The molecular weight of a molecule can impact its pharmacokinetics, such as its ability to cross cell membranes, its half-life, and its clearance rate.
+
+Lipophilicity: Lipophilicity, or a molecule's ability to dissolve in lipids, can impact its ability to cross cell membranes and distribute throughout the body.
+
+Hydrophilicity: Hydrophilicity, or a molecule's ability to dissolve in water, can impact its solubility, clearance, and excretion.
+
+Binding affinity: A molecule's binding affinity for a target protein can impact its potency and efficacy.
+
+Selectivity: Selectivity, or a molecule's ability to bind specifically to a target protein without affecting other proteins, can impact its safety and reduce the likelihood of off-target effects.
+
+Metabolic stability: A molecule's ability to resist metabolism in the body can impact its half-life and dosing frequency.
+
+Toxicity: A molecule's toxicity can impact its safety and potential for adverse effects.
+
+Synthetic accessibility: A molecule's synthetic accessibility can impact its ease of production and scalability.
+
+These are just a few potential attributes that could be considered when designing a molecule generator. Depending on the specific application and target, additional attributes such as conformational flexibility, ability to cross the blood-brain barrier, and resistance to efflux transporters, may also be important.

@@ -1,0 +1,12 @@
+docking til python? - https://www.biostars.org/p/17538/ (PTools og PyRosetta)
+
+
+Moses dataset https://github.com/molecularsets/moses
+
+Docking:
+https://deepchem.readthedocs.io/en/latest/get_started/tutorials.html
+https://deepchem.readthedocs.io/en/latest/api_reference/docking.html
+
+https://github.com/ptools/ptools
+
+https://www.pyrosetta.org/documentation
