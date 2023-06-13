@@ -1,1 +1,4 @@
 name: molgen
+
+data:
+  restart_preprocessing: True #If False all the files that have already been processed will be skipped. If a new attribute is added set this to True and rerun preprocessing.

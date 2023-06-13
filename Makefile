@@ -1,6 +1,15 @@
 .PHONY: install
+
+install-poetry: ## Install poetry
+	@echo "🚀 Installing Poetry"
+	@pipx install poetry==1.2.0a2
+	@$(eval include ${HOME}/.poetry/env)
+
 install: ## Install the poetry environment and install the pre-commit hooks
 	@echo "🚀 Creating virtual environment using pyenv and poetry"
+	@if [ "$(shell which poetry)" = "" ]; then \
+		$(MAKE) install-poetry; \
+	fi
 	@poetry install	
 	@ poetry run pre-commit install
 	@poetry shell
