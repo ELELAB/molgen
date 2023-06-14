@@ -1,12 +1,13 @@
+import multiprocessing as mp
 import os
 
+import pandas as pd
 from omegaconf import DictConfig, OmegaConf
-from tqdm import tqdm
 
 from src.molgen.data.attribute_calculators import (
     JazzyAttributeCalculator,
     RdkitAttributeCalculator,
-    SascorerAttributeCalculator,
+    SAScorerAttributeCalculator,
 )
 from src.molgen.data.dataset import DatasetFromFolder
 from src.molgen.data.selfie import SmileSelfieConverter
@@ -17,10 +18,71 @@ os.chdir(root_dir)
 config = OmegaConf.load(os.path.join(root_dir, "config", "config.yaml"))
 
 
+def process_file(file_path: str) -> None:
+    """
+    This function is used for parallel processing of the files in the dataset.
+
+    Args:
+        file_path (str): Path to the file to be processed
+
+    Returns:
+        None, but saves the processed file in data/processed/zinc15
+    """
+
+    # Loading data
+    data = pd.read_csv(file_path, delimiter="\t")
+
+    # Defining the attribute calculators
+    smile_selfie_converter = SmileSelfieConverter()
+    rdkit_attribute_calculator = RdkitAttributeCalculator()
+    jazzy_attribute_calculator = JazzyAttributeCalculator()
+    sascorer_attribute_calculator = SAScorerAttributeCalculator()
+
+    # Checking if all files should be repreprocessed
+    restart_preprocessing = config.data.restart_preprocessing
+
+    # Make new filepath and make directory if not present
+    new_path = file_path.replace("raw", "processed")
+    folder_path = os.path.dirname(new_path)
+    os.makedirs(folder_path, exist_ok=True)
+
+    # Checking if file already exists, if it does and restart_preprocessing is False, skip the file
+    if os.path.isfile(new_path) and not restart_preprocessing:
+        return
+
+    # Add the selfie representation to the file
+    data = smile_selfie_converter.add_selfie_to_file(
+        data, smile_column="smiles", selfie_column="selfies"
+    )  # Takes around 0.0005 seconds per molecule
+
+    # Add the attributes to the file
+    data = rdkit_attribute_calculator.add_all_to_file(
+        data, smile_column="smiles"
+    )  # Takes 0.004 seconds per molecule for qed, logp, tpsa, weight, but 0.25 for volume
+
+    # Add the sascorer attributes to the file
+    data = sascorer_attribute_calculator.add_sascorer_to_file(
+        data, smile_column="smiles"
+    )  # Takes around 0.0008 seconds per molecule
+
+    # Add the jazzy attributes to the file
+    data = jazzy_attribute_calculator.add_deltag_to_file(
+        data, smile_column="smiles"
+    )  # Takes around 0.15 seconds per molecule
+    data = jazzy_attribute_calculator.add_molecular_vector_to_file(
+        data, smile_column="smiles"
+    )  # Takes around 0.1 seconds per molecule
+
+    # Save the file
+    data.to_csv(new_path, sep="\t", index=False)
+
+    return
+
+
 def main(config: DictConfig) -> None:
     """Summary line.
 
-    Script to load the ZINC15 dataset from the ZINC15 dataset repository
+    Script to load the ZINC15 dataset from the ZINC15 dataset repository and add attributes for the smiles.
 
     Args:
         config (DictConfig): Configuration file located in config/config.yaml
@@ -34,53 +96,65 @@ def main(config: DictConfig) -> None:
 
     # Create a dataset object
     dataset = DatasetFromFolder(zinc15_folder)
+    all_files = dataset.file_paths
 
-    # Converters and attribute calculators
-    smile_selfie_converter = SmileSelfieConverter()
-    rdkit_attribute_calculator = RdkitAttributeCalculator()
-    jazzy_attribute_calculator = JazzyAttributeCalculator()
-    sascorer_attribute_calculator = SascorerAttributeCalculator()
+    # Parallel processing of the files
+    n_cores = min(mp.cpu_count(), config.data.max_cores_preprocessing)
+    pool = mp.Pool(processes=n_cores)
 
-    # Checking if all files should be repreprocessed
-    restart_preprocessing = config.data.restart_preprocessing
+    # Process the files
+    pool.map(process_file, all_files)
 
-    # Iterate over the files and add attributes and selfie representation
-    for i in tqdm(range(len(dataset))):
-        # Load the file and starting preprocessing
-        data, file_path = dataset[i]
+    # Close the pool
+    pool.close()
 
-        # Make new filepath and make directory if not present
-        new_path = file_path.replace("raw", "processed")
-        folder_path = os.path.dirname(new_path)
-        os.makedirs(folder_path, exist_ok=True)
+    ### Below is for single core processing
+    # # Converters and attribute calculators
+    # smile_selfie_converter = SmileSelfieConverter()
+    # rdkit_attribute_calculator = RdkitAttributeCalculator()
+    # jazzy_attribute_calculator = JazzyAttributeCalculator()
+    # sascorer_attribute_calculator = SAScorerAttributeCalculator()
 
-        # Checking if file already exists, if it does and restart_preprocessing is False, skip the file
-        if os.path.isfile(new_path) and not restart_preprocessing:
-            continue
+    # # Checking if all files should be repreprocessed
+    # restart_preprocessing = config.data.restart_preprocessing
 
-        # Add the selfie representation to the file
-        data = smile_selfie_converter.add_selfie_to_file(
-            data, smile_column="smiles", selfie_column="selfies"
-        )  # Takes around 0.0005 seconds per molecule
+    # # Iterate over the files and add attributes and selfie representation
+    # for i in tqdm(range(len(dataset))):
+    #     # Load the file and starting preprocessing
+    #     data, file_path = dataset[i]
 
-        # Add the sascorer attributes to the file
-        data = sascorer_attribute_calculator.add_all_to_file(data, smile_column="smiles")
+    #     # Make new filepath and make directory if not present
+    #     new_path = file_path.replace("raw", "processed")
+    #     folder_path = os.path.dirname(new_path)
+    #     os.makedirs(folder_path, exist_ok=True)
 
-        # Add the jazzy attributes to the file
-        data = jazzy_attribute_calculator.add_deltag_to_file(
-            data, smile_column="smiles"
-        )  # Takes around 0.15 seconds per molecule
-        data = jazzy_attribute_calculator.add_molecular_vector_to_file(
-            data, smile_column="smiles"
-        )  # Takes around 0.1 seconds per molecule
+    #     # Checking if file already exists, if it does and restart_preprocessing is False, skip the file
+    #     if os.path.isfile(new_path) and not restart_preprocessing:
+    #         continue
 
-        # Add the attributes to the file
-        data = rdkit_attribute_calculator.add_all_to_file(
-            data, smile_column="smiles"
-        )  # Takes 0.004 seconds per molecule for qed, logp, tpsa, weight, but 0.25 for volume
+    #     # Add the selfie representation to the file
+    #     data = smile_selfie_converter.add_selfie_to_file(
+    #         data, smile_column="smiles", selfie_column="selfies"
+    #     )  # Takes around 0.0005 seconds per molecule
 
-        # Save the file
-        data.to_csv(new_path, sep="\t", index=False)
+    #     # Add the attributes to the file
+    #     data = rdkit_attribute_calculator.add_all_to_file(
+    #         data, smile_column="smiles"
+    #     )  # Takes 0.004 seconds per molecule for qed, logp, tpsa, weight, but 0.25 for volume
+
+    #     # Add the sascorer attributes to the file
+    #     data = sascorer_attribute_calculator.add_sascorer_to_file(data, smile_column="smiles") # Takes around 0.0008 seconds per molecule
+
+    #     # Add the jazzy attributes to the file
+    #     data = jazzy_attribute_calculator.add_deltag_to_file(
+    #         data, smile_column="smiles"
+    #     )  # Takes around 0.15 seconds per molecule
+    #     data = jazzy_attribute_calculator.add_molecular_vector_to_file(
+    #         data, smile_column="smiles"
+    #     )  # Takes around 0.1 seconds per molecule
+
+    #     # Save the file
+    #     data.to_csv(new_path, sep="\t", index=False)
 
 
 if __name__ == "__main__":  # pragma: no cover

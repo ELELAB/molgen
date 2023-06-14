@@ -6,8 +6,8 @@ class SmileSelfieConverter:
         pass
 
     def smile_to_selfie(self, smile):
-        sf.encoder(smile)
-        return
+        selfie = sf.encoder(smile)
+        return selfie
 
     def selfie_to_smile(self, selfie):
         return sf.decoder(selfie)
