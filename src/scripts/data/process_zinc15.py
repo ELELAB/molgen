@@ -35,8 +35,8 @@ def process_file(file_path: str) -> None:
 
     # Defining the attribute calculators
     smile_selfie_converter = SmileSelfieConverter()
-    RdkitAttributeCalculator()
-    JazzyAttributeCalculator()
+    rdkit_attribute_calculator = RdkitAttributeCalculator()
+    jazzy_attribute_calculator = JazzyAttributeCalculator()
     sascorer_attribute_calculator = SAScorerAttributeCalculator()
 
     # Checking if all files should be repreprocessed
@@ -56,26 +56,28 @@ def process_file(file_path: str) -> None:
         data, smile_column="smiles", selfie_column="selfies"
     )  # Takes around 0.0005 seconds per molecule
 
-    # # Add the attributes to the file
-    # data = rdkit_attribute_calculator.add_all_to_file(
-    #     data, smile_column="smiles"
-    # )  # Takes 0.004 seconds per molecule for qed, logp, tpsa, weight, but 0.25 for volume
+    # Add the attributes to the file
+    data = rdkit_attribute_calculator.add_all_to_file(
+        data, smile_column="smiles"
+    )  # Takes 0.004 seconds per molecule for qed, logp, tpsa, weight, but 0.25 for volume
 
     # Add the sascorer attributes to the file
     data = sascorer_attribute_calculator.add_sascorer_to_file(
         data, smile_column="smiles"
     )  # Takes around 0.0008 seconds per molecule
 
-    # # Add the jazzy attributes to the file
-    # data = jazzy_attribute_calculator.add_deltag_to_file(
-    #     data, smile_column="smiles"
-    # )  # Takes around 0.15 seconds per molecule
-    # data = jazzy_attribute_calculator.add_molecular_vector_to_file(
-    #     data, smile_column="smiles"
-    # )  # Takes around 0.1 seconds per molecule
+    # Add the jazzy attributes to the file
+    data = jazzy_attribute_calculator.add_deltag_to_file(
+        data, smile_column="smiles"
+    )  # Takes around 0.15 seconds per molecule
+    data = jazzy_attribute_calculator.add_molecular_vector_to_file(
+        data, smile_column="smiles"
+    )  # Takes around 0.1 seconds per molecule
 
     # Save the file
     data.to_csv(new_path, sep="\t", index=False)
+
+    print("Processed file: ", file_path)
 
     return None
 
@@ -103,17 +105,9 @@ def main(config: DictConfig) -> None:
     n_cores = min(mp.cpu_count(), config.data.max_cores_preprocessing)
     pool = mp.Pool(processes=n_cores)
 
-    # Use tqdm to track the progress of the pool.map operation
-    with tqdm(total=len(all_files)) as pbar:
-        # Define a callback function that updates the progress bar
-        def update_progress(_):
-            pbar.update(1)
-
-        # Apply process_file to each file in all_files using pool.map
-        results = pool.map_async(process_file, all_files, callback=update_progress)
-
-        # Wait for the results to complete
-        results.wait()
+    # Do the processing and tracking with progress bar
+    for _ in tqdm(pool.imap_unordered(process_file, all_files), total=len(all_files)):
+        pass
 
     # Close the pool
     pool.close()

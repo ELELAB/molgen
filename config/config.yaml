@@ -1,5 +1,33 @@
 name: molgen
 
+general:
+  seed: 23
+
 data:
-  restart_preprocessing: True #If False all the files that have already been processed will be skipped. If a new attribute is added set this to True and rerun preprocessing.
+  restart_preprocessing: False #If False all the files that have already been processed will be skipped. If a new attribute is added set this to True and rerun preprocessing.
   max_cores_preprocessing: 8 #Maximum number of cores used when preprocessing files.
+  processed_data_path: data/processed/druglike-instock #
+  general_path: data/processed/general/
+  attribute_columns: ["logp","weight","qed","tpsa","volume","sascore","deltag","sdc","sdx","sa","dga","dgp","dgtot"]
+
+gct:
+  batch_size: 16 #Training batch size.
+  epochs: 50 #Number of epochs the model trains.
+  n_encoder_blocks: 5 #Number of encoder blocks in the transformer
+  n_decoder_blocks: 5 #Number of decoder blocks in the transformer
+  d_model: 512 #Embedding dimension.
+  d_ff: 2048 #Feed forward dimension in the feedforward layer of the transformer.
+  d_latent_space: 128 #Dimension of the latent space of the transition from the encoder to the decoder.
+  n_mha_heads: 16 #Number of heads in the multi headed attention layer
+  dropout: 0.1 #Dropout percentage.
+  normalizer_eps: 0.000001 #Normalization epsilon to make sure that we do not divide by 0.
+  include_bias: True #Wether to include bias in the torch layers.
+  initial_lr: 0.0001 # Initial LR of the optimizer.
+  optimizer_beta1: 0.9 # Beta 1 of the Adam optimizer
+  optimizer_beta2: 0.98 # Beta 2 of the Adam optimizer
+  lr_scheduler_factor: 0.2 #The factor parameter defines the reduction factor by which the learning rate will be multiplied (e.g., 0.2 means a 80% reduction)
+  lr_scheduler_patience: 1 #The patience of the scheduler, which is the number of epochs where there has to be no change before it reduces lr. 
+  kla_initial_beta: 0.02 #KL Annealing initial beta, which is the weighting og the kl divergence in the loss function
+  kla_increment_beta: 0.001 #The incrementation of the beta, how much it increases. 
+  kla_max_beta: 0.5 #Maximum beta
+  kla_beginning_epoch: 1 #The epoch where kl annealing is starting. 

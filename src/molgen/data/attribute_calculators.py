@@ -17,9 +17,9 @@ class RdkitAttributeCalculator:
             tpsa = Chem.rdMolDescriptors.CalcTPSA(molecule)
             weight = Descriptors.ExactMolWt(molecule)
 
-        except Exception as e:
-            print("Error in calculating qed, tpsa, logp or weight attributes for smile: ", smile)
-            print("Error: ", e)
+        except Exception:
+            # print("Error in calculating qed, tpsa, logp or weight attributes for smile: ", smile)
+            # print("Error: ", e)
             qed = None
             logp = None
             tpsa = None
@@ -32,9 +32,9 @@ class RdkitAttributeCalculator:
             AllChem.EmbedMolecule(molecule)
             volume = AllChem.ComputeMolVolume(molecule)
 
-        except Exception as e:
-            print("Error in calculating volume for smile: ", smile)
-            print("Error: ", e)
+        except Exception:
+            # print("Error in calculating volume for smile: ", smile)
+            # print("Error: ", e)
             volume = None
 
         return [qed, logp, tpsa, weight, volume]
@@ -73,9 +73,9 @@ class JazzyAttributeCalculator:
             dgp = mol_vector["dgp"]
             dgtot = mol_vector["dgtot"]
             mds = sdc + sdx
-        except Exception as e:
-            print("Error in calculating molecular vector for smile: ", smile)
-            print("Error: ", e)
+        except Exception:
+            # print("Error in calculating molecular vector for smile: ", smile)
+            # print("Error: ", e)
             sdc = None
             sdx = None
             sa = None
@@ -88,9 +88,9 @@ class JazzyAttributeCalculator:
     def calculate_deltag(self, smile):
         try:
             deltag = deltag_from_smiles(smile)
-        except Exception as e:
-            print("Error in calculating deltag for smile: ", smile)
-            print("Error: ", e)
+        except Exception:
+            # print("Error in calculating deltag for smile: ", smile)
+            # print("Error: ", e)
             deltag = None
         return deltag
 
@@ -130,9 +130,9 @@ class SAScorerAttributeCalculator:
         try:
             molecule = Chem.MolFromSmiles(smile)
             sascore = calculateScore(molecule)
-        except Exception as e:
-            print("Error in calculating sascorer for smile: ", smile)
-            print("Error: ", e)
+        except Exception:
+            # print("Error in calculating sascorer for smile: ", smile)
+            # print("Error: ", e)
             sascore = None
         return sascore
 

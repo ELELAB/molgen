@@ -6,7 +6,11 @@ class SmileSelfieConverter:
         pass
 
     def smile_to_selfie(self, smile):
-        selfie = sf.encoder(smile)
+        try:
+            selfie = sf.encoder(smile)
+        except Exception:
+            # print("Error in converting smile to selfie: ", smile)
+            selfie = None
         return selfie
 
     def selfie_to_smile(self, selfie):
