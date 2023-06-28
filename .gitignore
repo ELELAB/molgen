@@ -140,6 +140,9 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
+#Wandb
+wandb/
+
 # mkdocs documentation
 /site
 
