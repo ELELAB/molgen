@@ -12,7 +12,7 @@ data:
 
 gct:
   batch_size: 16 #Training batch size.
-  epochs: 50 #Number of epochs the model trains.
+  num_epochs: 50 #Number of epochs the model trains.
   n_encoder_blocks: 5 #Number of encoder blocks in the transformer
   n_decoder_blocks: 5 #Number of decoder blocks in the transformer
   d_model: 512 #Embedding dimension.
@@ -31,3 +31,18 @@ gct:
   kla_increment_beta: 0.001 #The incrementation of the beta, how much it increases. 
   kla_max_beta: 0.5 #Maximum beta
   kla_beginning_epoch: 1 #The epoch where kl annealing is starting. 
+  orth_initial_gamma: 0.0002 #Orthoganl Annealing initial gamma, which is the weighting of the orthognality loss of the latent space. 
+  orth_increment_gamma: 0.00001 #The incrementation of the gamma, how much it increases pr. epoch.
+  orth_max_gamma: 0.005 #Maximum weighting of orthogonal loss
+  orth_beginning_epoch: 1 #The epoch where orthogonal annealing starts
+  include_conditions_encoder: False #If the conditions should be concatenated with the smile molecule in the encoder.
+  include_conditions_decoder: True #If the conditions should be concatenated with the smile in the decoding of the model.
+  include_conditions_reparameterization: True #If the conditions should be concatenated after the reparameterization of the encoder.
+  save_model_epoch: 1 #When to save the model, if this is 1 it will save the model after each epoch.
+  model_save_path: models/gct/
+
+
+wandb:
+  WANDB_KEY: 0048a0aaf97e866f52771a3de5fc219094beceb7
+  entity: markussorensen
+

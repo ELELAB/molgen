@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import selfies as sf
 from omegaconf import DictConfig, OmegaConf
+from tqdm import tqdm
 
 from src.molgen.utils import get_root_directory
 
@@ -29,20 +30,22 @@ def main(config: DictConfig) -> None:
             if file.endswith(".txt"):
                 file_path = os.path.join(root, file)
                 file_paths.append(file_path)
-                data = pd.read_csv(file_path, delimiter="\t")  # Adjust the delimiter if needed
+                data = pd.read_csv(file_path, delimiter="\t", dtype=str)  # Adjust the delimiter if needed
                 file_lengths.append(data.shape[0])
 
     alphabet = set()
     max_selfie_length = 0
-    for file_path in file_paths:
-        file_data = pd.read_csv(file_path, delimiter="\t")
-        file_alphabet = sf.get_alphabet_from_selfies(file_data["selfies"])
+    max_selfie = ""
+    for file_path in tqdm(file_paths):
+        file_data = pd.read_csv(file_path, delimiter="\t", dtype=str)
+        selfies = file_data["selfies"].dropna().astype(str)
+        file_alphabet = sf.get_alphabet_from_selfies(selfies)
         alphabet = alphabet.union(file_alphabet)
-        file_max_selfie_lengths = [sf.len_selfies(s) for s in file_data["selfies"]]
+        file_max_selfie_lengths = [sf.len_selfies(s) for s in selfies]
         file_max_selfie_length = max(file_max_selfie_lengths)
         if file_max_selfie_length > max_selfie_length:
             max_selfie_length = file_max_selfie_length
-            file_data["selfies"][file_max_selfie_lengths.index(file_max_selfie_length)]
+            max_selfie = selfies[file_max_selfie_lengths.index(file_max_selfie_length)]
     alphabet.add("[nop]")
     alphabet = sorted(alphabet)
 
@@ -72,6 +75,8 @@ def main(config: DictConfig) -> None:
     max_selfie_length_path = os.path.join(root_dir, config.data.general_path, "max_selfie_length.txt")
     with open(max_selfie_length_path, "w") as f:
         f.write(str(max_selfie_length))
+
+    print(f"Max selfie length: {max_selfie_length} \n Selfie: {max_selfie}")
 
 
 if __name__ == "__main__":  # pragma: no cover

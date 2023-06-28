@@ -1,0 +1,1 @@
+{"train_loss": NaN, "train_rce_loss": NaN, "train_kl_divergence": NaN, "train_orthogonal_loss": NaN, "train_beta": 0.02, "train_gamma": 0.0002, "train_steps": 704, "_timestamp": 1687961493.292948, "_runtime": 3016.5566670894623, "_step": 703}

@@ -56,42 +56,33 @@ class SelfiesDataset(Dataset):
         self.pad_to_len = max_selfie_len
         self.train_ratio = train_ratio
         self.file_paths, self.file_lengths = self._get_file_paths()
-        self.train_idx, self.val_idx = self._divide_data_idx()
+        self.data = self._get_data()
         # self.alphabet = self._make_alphabet()
         # self.max_selfie_length = self._get_max_selfie_length()
         # self.symbol_to_index, self.index_to_symbol = self._make_symbol_to_index()
 
     def __len__(self):
-        if self.is_train_set:
-            return len(self.train_idx)
-        else:
-            return len(self.val_idx)
+        return self.data.shape[0]
 
     def __getitem__(self, idx):
-        # Converting idx of train and test set to the real idx in the files
-        idx = self.train_idx[idx] if self.is_train_set else self.val_idx[idx]
+        # Getting the data row
+        row = self.data.iloc[idx]
 
-        # Finding the file idx
-        file_idx = 0
-        while idx >= self.file_lengths[file_idx]:
-            idx -= self.file_lengths[file_idx]
-            file_idx += 1
-        file_path = self.file_paths[file_idx]
-
-        # Loading the data row
-        row = pd.read_csv(
-            file_path, delimiter="\t", skiprows=lambda x: x not in [0, idx]
-        )  # Adjust the delimiter if needed
-        selfie = row["selfies"][0]
+        # Getting the selfie
+        selfie = row["selfies"]
 
         # Making the one hot encoding of the selfie
-        selfie_onehot = torch.Tensor(self.selfie_to_onehot(selfie))
-        try:
-            attributes = torch.Tensor(row[self.attribute_columns].values)
-        except KeyError:
-            print(f"File path: {file_path} Does not have attribute columns.")
+        selfie_labels = torch.Tensor(self.selfie_to_labels(selfie)).type(torch.int64)
 
-        return selfie_onehot, attributes
+        # Getting the attributes
+        attributes = torch.Tensor(row[self.attribute_columns]).type(torch.float)
+
+        # Making the src, trg_input and trg_output for the transformer
+        src = selfie_labels[1:-1]  # Removing the [nop] tokens from the start and end
+        trg_input = selfie_labels[:-1]  # Removing the [nop] token from the end
+        trg_output = selfie_labels[1:]  # Removing the [nop] token from the start
+
+        return src, trg_input, trg_output, attributes
 
     def _get_file_paths(self):
         file_paths = []
@@ -131,15 +122,64 @@ class SelfiesDataset(Dataset):
             index_to_symbol[i] = symbol
         return symbol_to_index, index_to_symbol
 
-    def _divide_data_idx(self):
+    def _get_data(self):
+        # Divide the data into train and validation
         total_length = sum(self.file_lengths)
         train_length = int(total_length * self.train_ratio)
-        train_idx = torch.randperm(total_length)[:train_length]
-        val_idx = torch.randperm(total_length)[train_length:]
-        return train_idx, val_idx
+        shuffle_idx = torch.randperm(total_length)
+        train_idx = shuffle_idx[:train_length]
+        val_idx = shuffle_idx[train_length:]
+
+        # Loading data to memory to speed up indexing
+        all_data = []
+        total_lengths = 0
+        for idx, file_path in enumerate(self.file_paths):
+            # Loading the file
+            data = pd.read_csv(file_path, delimiter="\t")
+            file_length = self.file_lengths[idx]
+
+            if self.is_train_set:
+                # Getting the training and validation idxes for this file
+                file_train_idxes = (
+                    train_idx[torch.logical_and(train_idx < total_lengths + file_length, train_idx >= total_lengths)]
+                    - total_lengths
+                )
+
+                # Adding the idxes to the train and validation data
+                all_data.append(data.iloc[file_train_idxes])
+
+            else:
+                # Getting the training and validation idxes for this file
+                file_val_idxes = (
+                    val_idx[torch.logical_and(val_idx < total_lengths + file_length, val_idx >= total_lengths)]
+                    - total_lengths
+                )
+
+                # Adding the idxes to the train and validation data
+                all_data.append(data.iloc[file_val_idxes])
+
+            # Updating the total lengths
+            total_lengths += file_length
+
+        # Concatenating the dataframes
+        all_data = pd.concat(all_data)
+
+        return all_data
 
     def selfie_to_onehot(self, selfie):
+        # Adding the [nop] token to the start and end of the selfie to make sure the transformer learns to start and stop
+        selfie_nop = "[nop]" + selfie + "[nop]"
+        # pad_to_len=self.pad_to_len + 2 because we add the [nop] token to start and stop
         one_hot = sf.selfies_to_encoding(
-            selfies=selfie, vocab_stoi=self.symbol_to_idx, pad_to_len=self.pad_to_len, enc_type="one_hot"
+            selfies=selfie_nop, vocab_stoi=self.symbol_to_idx, pad_to_len=self.pad_to_len + 2, enc_type="one_hot"
         )
         return one_hot
+
+    def selfie_to_labels(self, selfie):
+        # Adding the [nop] token to the start and end of the selfie to make sure the transformer learns to start and stop
+        selfie_nop = "[nop]" + selfie + "[nop]"
+        # pad_to_len=self.pad_to_len + 2 because we add the [nop] token to start and stop
+        selfie_labels = sf.selfies_to_encoding(
+            selfies=selfie_nop, vocab_stoi=self.symbol_to_idx, pad_to_len=self.pad_to_len + 2, enc_type="label"
+        )
+        return selfie_labels

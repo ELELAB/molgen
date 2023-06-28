@@ -6,7 +6,7 @@ from src.molgen.models.transformer import (
     MultiHeadAttention,
     Normalizer,
     PositionalEncoder,
-    attention_function,
+    attention,
 )
 from src.molgen.models.utils import get_clones
 
@@ -72,7 +72,6 @@ class GCT(nn.Module):
     def __init__(
         self,
         max_selfie_len,
-        n_attributes,
         n_alphabet_elements,
         n_encoder_blocks,
         n_decoder_blocks,
@@ -83,17 +82,20 @@ class GCT(nn.Module):
         dropout_p=0.1,
         normalizer_eps=1e-6,
         include_bias=False,
+        include_conditions_encoder=False,
+        include_conditions_decoder=False,
+        include_conditions_reparameterization=False,
     ):
         super().__init__()
 
         self.smile_embedder = nn.Embedding(n_alphabet_elements, d_model)
-        self.attribute_embedder = nn.Embedding(n_attributes, d_model)
-        self.positional_encoder = PositionalEncoder(d_model, max_selfie_len, dropout_p)
+        self.attribute_embedder = nn.Linear(1, d_model, bias=False)
+        self.positional_encoder = PositionalEncoder(d_model, max_selfie_len + 2, dropout_p)
         self.encoder_blocks = get_clones(
-            PreLNEncoder(d_model, n_mha_heads, attention_function, d_ff, dropout_p, normalizer_eps), n_encoder_blocks
+            PreLNEncoder(d_model, n_mha_heads, attention, d_ff, dropout_p, normalizer_eps), n_encoder_blocks
         )
         self.decoder_blocks = get_clones(
-            PreLNDecoder(d_model, n_mha_heads, attention_function, d_ff, dropout_p, normalizer_eps), n_decoder_blocks
+            PreLNDecoder(d_model, n_mha_heads, attention, d_ff, dropout_p, normalizer_eps), n_decoder_blocks
         )
 
         self.layer_norm1 = Normalizer(d_model, normalizer_eps)
@@ -105,7 +107,13 @@ class GCT(nn.Module):
 
         self.linear_output = nn.Linear(d_model, n_alphabet_elements, bias=include_bias)
 
+        self.linear_output_attributes = nn.Linear(d_model, 1, bias=include_bias)
+
         self.d_latent_space = d_latent_space
+
+        self.include_conditions_encoder = include_conditions_encoder
+        self.include_conditions_decoder = include_conditions_decoder
+        self.include_conditions_reparameterization = include_conditions_reparameterization
 
         self.apply(self._init_weights)
 
@@ -124,11 +132,14 @@ class GCT(nn.Module):
             z = torch.randn(std.size(), device=mu.device, dtype=mu.dtype)
         return z.mul(std) + mu
 
-    def encode(self, smile, conditions, mask=None):
-        conditions = self.attribute_embedder(conditions)
+    def encode(self, smile, conditions=None, mask=None):
         x = self.smile_embedder(smile)
-        x = torch.cat([conditions, x], dim=1)
         x = self.positional_encoder(x)
+
+        if self.include_conditions_encoder:
+            conditions = self.attribute_embedder(conditions)
+            x = torch.cat([conditions, x], dim=1)
+
         for i in range(len(self.encoder_blocks)):
             x = self.encoder_blocks[i](x, mask)
 
@@ -144,10 +155,13 @@ class GCT(nn.Module):
     def decode(self, target_input, conditions_input, z, src_mask, trg_mask):
         x = self.smile_embedder(target_input)
         x = self.positional_encoder(x)
+        conditions = self.attribute_embedder(conditions_input)
+        if self.include_conditions_decoder:
+            x = torch.cat([conditions, x], dim=1)
 
         encoder_out = self.encoder_to_decoder(z)
-        conditions = self.attribute_embedder(conditions_input)
-        encoder_out = torch.cat([conditions, encoder_out], dim=1)
+        if self.include_conditions_reparameterization:
+            encoder_out = torch.cat([conditions, encoder_out], dim=1)
 
         for i in range(len(self.decoder_blocks)):
             x = self.decoder_blocks[i](x, encoder_out, conditions_input, src_mask, trg_mask)
@@ -155,10 +169,19 @@ class GCT(nn.Module):
         return self.layer_norm1(x)
 
     def forward(self, smile, target_input, conditions, src_mask=None, trg_mask=None):
+        # Making conditions 3 dimensional
+        conditions = conditions.unsqueeze(-1)
         z, mu, logvar = self.encode(smile, conditions, src_mask)
         decoder_out = self.decode(target_input, conditions, z, src_mask, trg_mask)
-        output = self.linear_output(decoder_out)
-        return output, z, mu, logvar
+        if self.include_conditions_decoder:
+            decoder_attributes = decoder_out[:, : conditions.shape[1]]
+            decoder_selfie = decoder_out[:, conditions.shape[1] :]
+            attribute_output = self.linear_output_attributes(decoder_attributes)
+        else:
+            decoder_selfie = decoder_out
+            attribute_output = None
+        output = self.linear_output(decoder_selfie)
+        return output, attribute_output, z, mu, logvar
 
     # def generate(self, config, n_samples=16, device="cpu", method = "beam_search", z=None, conditions=None, scale_conditions=True):
     #     if config.additional_metrics.scaling == "robustscaler":

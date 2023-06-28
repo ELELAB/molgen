@@ -1,0 +1,237 @@
+{
+    "os": "Linux-4.15.0-161-generic-x86_64-with-glibc2.27",
+    "python": "3.8.0",
+    "heartbeatAt": "2023-06-27T14:03:37.404066",
+    "startedAt": "2023-06-27T14:03:36.144785",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "pretrain_gct.py",
+    "codePath": "pretrain_gct.py",
+    "git": {
+        "remote": "git@github.com:ELELAB/molgen.git",
+        "commit": "f06133e2e85b25c31eb06f8d3497a434618e320f"
+    },
+    "email": null,
+    "root": "/data/user/mas/molgen",
+    "host": "kb-bioinfo01",
+    "username": "mas",
+    "executable": "/data/user/mas/molgen/.venv/bin/python",
+    "cpu_count": 20,
+    "cpu_count_logical": 40,
+    "cpu_freq": {
+        "current": 2314.256674999999,
+        "min": 1200.0,
+        "max": 3000.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2596.858,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1707.729,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.858,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1198.712,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.858,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.858,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.858,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.858,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.858,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1198.671,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.858,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.855,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2597.426,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2590.634,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2593.819,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.953,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1198.888,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.98,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2597.019,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.79,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2597.962,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1685.717,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2598.525,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1204.771,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2595.969,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.642,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2597.447,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2598.163,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2597.471,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1200.892,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2594.264,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.858,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.858,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.857,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.858,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.857,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1201.142,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.858,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.859,
+            "min": 1200.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2596.858,
+            "min": 1200.0,
+            "max": 3000.0
+        }
+    ],
+    "disk": {
+        "total": 365.5479621887207,
+        "used": 287.4710922241211
+    },
+    "memory": {
+        "total": 125.65472030639648
+    }
+}
