@@ -93,6 +93,7 @@ class SelfiesDataset(Dataset):
                     file_path = os.path.join(root, file)
                     file_paths.append(file_path)
                     data = pd.read_csv(file_path, delimiter="\t")  # Adjust the delimiter if needed
+                    data = data.dropna()
                     file_lengths.append(data.shape[0])
         return file_paths, file_lengths
 
@@ -136,6 +137,7 @@ class SelfiesDataset(Dataset):
         for idx, file_path in enumerate(self.file_paths):
             # Loading the file
             data = pd.read_csv(file_path, delimiter="\t")
+            data = data.dropna()
             file_length = self.file_lengths[idx]
 
             if self.is_train_set:

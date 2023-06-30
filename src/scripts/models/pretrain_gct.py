@@ -3,13 +3,13 @@ import json
 import os
 
 import torch
+import wandb
 from omegaconf import DictConfig, OmegaConf
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-import wandb
 from src.molgen.data.dataset import SelfiesDataset
 from src.molgen.models.gct import GCT
 from src.molgen.models.kl_annealer import KLAnnealer
@@ -151,6 +151,7 @@ def main(config: DictConfig) -> None:
         train_rce_loss = 0
         train_kl_divergence = 0
         train_orthogonal_loss = 0
+        train_accuracy = 0
         for _idx, (src, trg_input, trg_output, attributes) in tqdm(
             enumerate(trainloader), leave=False, total=num_train_batches
         ):
@@ -192,6 +193,9 @@ def main(config: DictConfig) -> None:
             optimizer.step()
 
             # Adding the loss to the total loss
+            accuracy = torch.argmax(selfie_p, axis=2) == trg_output
+            accuracy = torch.mean(accuracy.type(torch.float))
+            train_accuracy += accuracy.item() / num_train_batches
             train_loss += loss.item()
             train_rce_loss += rce_loss.item()
             train_kl_divergence += kl_divergence.item()
@@ -226,6 +230,7 @@ def main(config: DictConfig) -> None:
 
         # Validating the model
         model.eval()
+        val_accuracy = 0
         val_loss = 0
         val_rce_loss = 0
         val_kl_divergence = 0
@@ -263,6 +268,9 @@ def main(config: DictConfig) -> None:
                 )
 
                 # Adding the loss to the total loss
+                accuracy = torch.argmax(selfie_p, axis=2) == trg_output
+                accuracy = torch.mean(accuracy.type(torch.float))
+                val_accuracy += accuracy.item() / num_val_batches
                 val_loss += loss.item()
                 val_rce_loss += rce_loss.item()
                 val_kl_divergence += kl_divergence.item()
