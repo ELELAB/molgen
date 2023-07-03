@@ -10,8 +10,10 @@ def make_padding_mask(x, padding_idx, n_conditions=0):
     It masks all elements equal to the padding integer.
     The n_conditions input makes sure to append n columns to the start of the mask which are allways visible.
     """
+    device = x.device
+
     # Make mask of shape (batch_size, seq_len)
-    mask = torch.ones_like(x, dtype=bool)
+    mask = torch.ones_like(x, dtype=bool).to(device)
 
     # Find first occurence of padding_int in x
     padding_mask = torch.eq(x, padding_idx)
@@ -23,16 +25,17 @@ def make_padding_mask(x, padding_idx, n_conditions=0):
 
     # Add n_conditions columns to the start of the mask
     if n_conditions > 0:
-        condition_mask = torch.ones([x.shape[0], n_conditions])
+        condition_mask = torch.ones([x.shape[0], n_conditions]).to(device)
         mask = torch.cat([condition_mask, mask], axis=1)
     mask = mask.unsqueeze(-2)
     return mask
 
 
-def make_nopeak_mask(batch_size, dimension=80, n_conditions=0):
+def make_nopeak_mask(batch_size, device="cpu", dimension=80, n_conditions=0):
     """
     This function makes the nopeak mask for the decoder part of the transformer.
     """
+
     mask = torch.tril(torch.ones([dimension, dimension])).expand(batch_size, dimension, dimension)
 
     # Add n_conditions columns to the left and top of the mask
@@ -41,7 +44,7 @@ def make_nopeak_mask(batch_size, dimension=80, n_conditions=0):
         final_mask[:, n_conditions:, n_conditions:] = mask
     else:
         final_mask = mask
-    return final_mask
+    return final_mask.to(device)
 
 
 def get_clones(module, N):

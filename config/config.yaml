@@ -11,7 +11,8 @@ data:
   attribute_columns: ["logp","weight","qed","tpsa","volume","sascore","deltag","sdc","sdx","sa","dga","dgp","dgtot"]
 
 gct:
-  batch_size: 16 #Training batch size.
+  restart_training: False #If False the previous model will be loaded and training will continue. If a new attribute or hyperparameters are changes set this to True and rerun training.
+  batch_size: 32 #Training batch size.
   num_epochs: 50 #Number of epochs the model trains.
   n_encoder_blocks: 5 #Number of encoder blocks in the transformer
   n_decoder_blocks: 5 #Number of decoder blocks in the transformer
@@ -45,4 +46,5 @@ gct:
 wandb:
   WANDB_KEY: 0048a0aaf97e866f52771a3de5fc219094beceb7
   entity: markussorensen
+  log_n_steps: 100 #Log every n steps
 
