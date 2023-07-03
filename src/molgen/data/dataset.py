@@ -46,6 +46,7 @@ class SelfiesDataset(Dataset):
         is_train_set=True,
         train_ratio=0.9,
         transform=None,
+        seed=42,
     ):
         self.data_folder = data_folder
         self.transform = transform
@@ -55,6 +56,7 @@ class SelfiesDataset(Dataset):
         self.idx_to_symbol = index_to_symbol
         self.pad_to_len = max_selfie_len
         self.train_ratio = train_ratio
+        self.seed = seed
         self.file_paths, self.file_lengths = self._get_file_paths()
         self.data = self._get_data()
         # self.alphabet = self._make_alphabet()
@@ -93,7 +95,9 @@ class SelfiesDataset(Dataset):
                     file_path = os.path.join(root, file)
                     file_paths.append(file_path)
                     data = pd.read_csv(file_path, delimiter="\t")  # Adjust the delimiter if needed
-                    data = data.dropna()
+                    # Drop data where attribute columns or selfie is NaN
+                    data = data.dropna(subset=self.attribute_columns)
+                    data = data.dropna(subset=["selfies"])
                     file_lengths.append(data.shape[0])
         return file_paths, file_lengths
 
@@ -125,6 +129,7 @@ class SelfiesDataset(Dataset):
 
     def _get_data(self):
         # Divide the data into train and validation
+        torch.manual_seed(self.seed)
         total_length = sum(self.file_lengths)
         train_length = int(total_length * self.train_ratio)
         shuffle_idx = torch.randperm(total_length)
@@ -137,7 +142,8 @@ class SelfiesDataset(Dataset):
         for idx, file_path in enumerate(self.file_paths):
             # Loading the file
             data = pd.read_csv(file_path, delimiter="\t")
-            data = data.dropna()
+            data = data.dropna(subset=self.attribute_columns)
+            data = data.dropna(subset=["selfies"])
             file_length = self.file_lengths[idx]
 
             if self.is_train_set:

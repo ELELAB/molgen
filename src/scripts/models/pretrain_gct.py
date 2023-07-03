@@ -1,15 +1,14 @@
-import copy
 import json
 import os
 
 import torch
-import wandb
 from omegaconf import DictConfig, OmegaConf
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+import wandb
 from src.molgen.data.dataset import SelfiesDataset
 from src.molgen.models.gct import GCT
 from src.molgen.models.kl_annealer import KLAnnealer
@@ -59,8 +58,9 @@ def main(config: DictConfig) -> None:
     train_dataset = SelfiesDataset(
         data_dir, config.data.attribute_columns, index_to_symbol, symbol_to_index, max_selfie_length, is_train_set=True
     )
-    val_dataset = copy.deepcopy(train_dataset)
-    val_dataset.is_train_set = False
+    val_dataset = SelfiesDataset(
+        data_dir, config.data.attribute_columns, index_to_symbol, symbol_to_index, max_selfie_length, is_train_set=False
+    )
 
     # Load dataloader
     trainloader = DataLoader(train_dataset, batch_size=config.gct.batch_size, shuffle=True)
@@ -218,6 +218,7 @@ def main(config: DictConfig) -> None:
         # Logging the average loss for the epoch
         wandb_run.log(
             {
+                "train_accuracy": train_accuracy,
                 "train_loss": train_loss / num_train_batches,
                 "train_rce_loss": train_rce_loss / num_train_batches,
                 "train_kl_divergence": train_kl_divergence / num_train_batches,
@@ -282,6 +283,7 @@ def main(config: DictConfig) -> None:
         # Logging the average loss for the epoch
         wandb_run.log(
             {
+                "val_accuracy": val_accuracy,
                 "val_loss": val_loss / num_val_batches,
                 "val_rce_loss": val_rce_loss / num_val_batches,
                 "val_kl_divergence": val_kl_divergence / num_val_batches,
