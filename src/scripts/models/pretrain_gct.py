@@ -9,6 +9,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from sklearn.preprocessing import StandardScaler
 
 from src.molgen.data.dataset import SelfiesDataset
 from src.molgen.models.gct import GCT
@@ -59,8 +60,17 @@ def main(config: DictConfig) -> None:
     train_dataset = SelfiesDataset(
         data_dir, config.data.attribute_columns, index_to_symbol, symbol_to_index, max_selfie_length, is_train_set=True
     )
-    val_dataset = copy.deepcopy(train_dataset)
-    val_dataset.is_train_set = False
+    val_dataset = SelfiesDataset(
+        data_dir, config.data.attribute_columns, index_to_symbol, symbol_to_index, max_selfie_length, is_train_set=False
+    )
+
+    # Defining data scaler
+    scaler = StandardScaler()
+    scaler.fit(train_dataset.data[config.data.attribute_columns])
+
+    # Scale data
+    train_dataset.data[config.data.attribute_columns] = scaler.transform(train_dataset.data[config.data.attribute_columns])
+    val_dataset.data[config.data.attribute_columns] = scaler.transform(val_dataset.data[config.data.attribute_columns])
 
     # Load dataloader
     trainloader = DataLoader(train_dataset, batch_size=config.gct.batch_size, shuffle=True)
@@ -78,7 +88,8 @@ def main(config: DictConfig) -> None:
         d_model=config.gct.d_model,
         d_ff=config.gct.d_ff,
         d_latent_space=config.gct.d_latent_space,
-        n_mha_heads=config.gct.n_mha_heads,
+        n_mha_heads_encoder=config.gct.n_mha_heads_encoder,
+        n_mha_heads_decoder=config.gct.n_mha_heads_decoder,
         dropout_p=config.gct.dropout,
         normalizer_eps=config.gct.normalizer_eps,
         include_bias=config.gct.include_bias,

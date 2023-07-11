@@ -31,7 +31,21 @@ class LossFunction:
         latent_std = torch.exp(0.5 * log_var)
         cov_matrix = torch.matmul(latent_std.unsqueeze(-1), latent_std.unsqueeze(-2))
         gram_matrix = torch.matmul(mu.unsqueeze(-1), mu.unsqueeze(-2))
-        orthogonal_loss = torch.norm(cov_matrix * gram_matrix, dim=(-1, -2)).mean()
+
+        #Splitting calculation up to avoid memory error
+        chunk_size = 50  # Define the size of each chunk
+        total_chunks = (cov_matrix.size(-1) // chunk_size) + 1
+
+        norms = []
+        for i in range(total_chunks):
+            start = i * chunk_size
+            end = min(start + chunk_size, cov_matrix.size(-1))
+            chunk_cov_matrix = cov_matrix[..., start:end, start:end]
+            chunk_gram_matrix = gram_matrix[..., start:end, start:end]
+            chunk_norm = torch.norm(chunk_cov_matrix * chunk_gram_matrix, dim=(-1, -2))
+            norms.append(chunk_norm)
+
+        orthogonal_loss = torch.cat(norms, dim=-1).mean()
 
         # Final loss where kl_divergence is weighted by beta, to make sure it does not take over too soon.
         loss = smile_rce_loss + beta * kl_divergence + gamma * orthogonal_loss
