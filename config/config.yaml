@@ -8,9 +8,10 @@ data:
   max_cores_preprocessing: 8 #Maximum number of cores used when preprocessing files.
   processed_data_path: data/processed/druglike-instock #
   general_path: data/processed/general/
-  attribute_columns: ["logp","weight","qed","tpsa","volume","sascore","deltag","sdc","sdx","sa","dga","dgp","dgtot"]
+  attribute_columns: ["logp","weight","qed","tpsa","sascore","sdc","sdx","sa","dga","dgp","dgtot"] #["logp","weight","qed","tpsa","volume","sascore","deltag","sdc","sdx","sa","dga","dgp","dgtot"]
 
 gct:
+  restart_training: False #If False the previous model will be loaded and training will continue. If a new attribute or hyperparameters are changes set this to True and rerun training.
   batch_size: 16 #Training batch size.
   num_epochs: 50 #Number of epochs the model trains.
   n_encoder_blocks: 5 #Number of encoder blocks in the transformer
@@ -18,7 +19,8 @@ gct:
   d_model: 512 #Embedding dimension.
   d_ff: 2048 #Feed forward dimension in the feedforward layer of the transformer.
   d_latent_space: 128 #Dimension of the latent space of the transition from the encoder to the decoder.
-  n_mha_heads: 16 #Number of heads in the multi headed attention layer
+  n_mha_heads_encoder: 16 #Number of heads in the multi headed attention layer for encoder.
+  n_mha_heads_decoder: 16 #Number of heads in the multi headed attention layer for decoder.
   dropout: 0.1 #Dropout percentage.
   normalizer_eps: 0.000001 #Normalization epsilon to make sure that we do not divide by 0.
   include_bias: True #Wether to include bias in the torch layers.
@@ -27,22 +29,45 @@ gct:
   optimizer_beta2: 0.98 # Beta 2 of the Adam optimizer
   lr_scheduler_factor: 0.2 #The factor parameter defines the reduction factor by which the learning rate will be multiplied (e.g., 0.2 means a 80% reduction)
   lr_scheduler_patience: 1 #The patience of the scheduler, which is the number of epochs where there has to be no change before it reduces lr. 
+  lr_schedule_min_lr: 0.000001 #The minimum learning rate of the scheduler.
   kla_initial_beta: 0.02 #KL Annealing initial beta, which is the weighting og the kl divergence in the loss function
   kla_increment_beta: 0.001 #The incrementation of the beta, how much it increases. 
-  kla_max_beta: 0.5 #Maximum beta
+  kla_max_beta: 2 #Maximum beta
   kla_beginning_epoch: 1 #The epoch where kl annealing is starting. 
   orth_initial_gamma: 0.0002 #Orthoganl Annealing initial gamma, which is the weighting of the orthognality loss of the latent space. 
   orth_increment_gamma: 0.00001 #The incrementation of the gamma, how much it increases pr. epoch.
-  orth_max_gamma: 0.005 #Maximum weighting of orthogonal loss
+  orth_max_gamma: 0.02 #Maximum weighting of orthogonal loss
   orth_beginning_epoch: 1 #The epoch where orthogonal annealing starts
   include_conditions_encoder: False #If the conditions should be concatenated with the smile molecule in the encoder.
   include_conditions_decoder: True #If the conditions should be concatenated with the smile in the decoding of the model.
   include_conditions_reparameterization: True #If the conditions should be concatenated after the reparameterization of the encoder.
   save_model_epoch: 1 #When to save the model, if this is 1 it will save the model after each epoch.
   model_save_path: models/gct/
+  debugging: False #If true this will only train on a small subset of the data and then return.
+  generation_method: "beam_search" #The method used to generate molecules. Options: "beem_search", "greedy_search"
+  beam_width: 10 #The width of the beam search.
+  beam_search_alpha: 0.7 #Length normalization, if alpha=1 then it will be normalized by length, if alpha=0 no normalization. 
 
+gct_hyperoptim:
+  eval_n_molecules_generated: 1000 #Number of molecules each model generates to evaluate the model.
+  eval_n_molecules_pr_condition: 32 #Number of molecules each condition combination generates to evaluate the model.
+  eval_generation_method: "beam_search" #The method used to generate molecules for evaluation. Options: "beam_search", "greedy_search"
+  eval_condition_noise: 0.01 #The scaler of the noise added to the conditions.
+  eval_loss_validation_rce_weight: 150 #The weight of the validation rce loss in the hyperparameter optimization. These are on a scale of around 0.01, so weight should be bigger.
+  eval_loss_validation_kl_weight: 150 #The weight of the validation loss in the hyperparameter optimization. These are on a scale of around 0.005, so weight should be bigger.
+  eval_loss_validation_orth_weight: 0.005 #The weight of the validation loss in the hyperparameter optimization. These are on a scale of around 1-2, so weight should be smaller.
+  eval_loss_validity_weight: 0.5 #The weight of the validity loss in the hyperparameter optimization.
+  eval_loss_novelty_weight: 0.5 #The weight of the novelty loss in the hyperparameter optimization.
+  eval_loss_uniqueness_weight: 1 #The weight of the uniqueness loss in the hyperparameter optimization.
+  eval_loss_attribute_accuracy: 2 #The weight of the attribute accuracy loss in the hyperparameter optimization.
+  save_models: True #If each model should be saved during the hyperparameter optimization.
+  study_name: gct_hyperoptim_study #The name of the hyperparameter optimization study.
+  study_path: models/gct/gct_hyperoptim_study.pkl #The path where the hyperparameter optimization study is saved.
+  restart_study: False #If the study should be restarted or continued.
+  n_study_runs: 100 #The number of trials in the hyperparameter optimization study before the script ends.
 
 wandb:
   WANDB_KEY: 0048a0aaf97e866f52771a3de5fc219094beceb7
   entity: markussorensen
+  log_n_steps: 100 #Log every n steps
 

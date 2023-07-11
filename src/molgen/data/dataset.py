@@ -34,7 +34,6 @@ class DatasetFromFolder(Dataset):
                     file_paths.append(file_path)
         return file_paths
 
-
 class SelfiesDataset(Dataset):
     def __init__(
         self,
@@ -46,6 +45,7 @@ class SelfiesDataset(Dataset):
         is_train_set=True,
         train_ratio=0.9,
         transform=None,
+        seed=42,
     ):
         self.data_folder = data_folder
         self.transform = transform
@@ -55,6 +55,7 @@ class SelfiesDataset(Dataset):
         self.idx_to_symbol = index_to_symbol
         self.pad_to_len = max_selfie_len
         self.train_ratio = train_ratio
+        self.seed = seed
         self.file_paths, self.file_lengths = self._get_file_paths()
         self.data = self._get_data()
         # self.alphabet = self._make_alphabet()
@@ -92,15 +93,17 @@ class SelfiesDataset(Dataset):
                 if file.endswith(".txt"):
                     file_path = os.path.join(root, file)
                     file_paths.append(file_path)
-                    data = pd.read_csv(file_path, delimiter="\t")  # Adjust the delimiter if needed
-                    data = data.dropna()
+                    data = pd.read_csv(file_path, delimiter="\t", dtype={'features': str})  # Adjust the delimiter if needed
+                    # Drop data where attribute columns or selfie is NaN
+                    data = data.dropna(subset=self.attribute_columns)
+                    data = data.dropna(subset=["selfies"])
                     file_lengths.append(data.shape[0])
         return file_paths, file_lengths
 
     def _make_alphabet(self):
         alphabet = set()
         for file_path in self.file_paths:
-            file_data = pd.read_csv(file_path, delimiter="\t")
+            file_data = pd.read_csv(file_path, delimiter="\t", dtype={'features': str})
             file_alphabet = sf.get_alphabet_from_selfies(file_data["selfies"])
             alphabet = alphabet.union(file_alphabet)
         alphabet.add("[nop]")
@@ -110,7 +113,7 @@ class SelfiesDataset(Dataset):
     def _get_max_selfie_length(self):
         max_length = 0
         for file_path in self.file_paths:
-            file_data = pd.read_csv(file_path, delimiter="\t")
+            file_data = pd.read_csv(file_path, delimiter="\t", dtype={'features': str})
             file_max_length = max(sf.len_selfies(s) for s in file_data["selfies"])
             max_length = max(max_length, file_max_length)
         return max_length
@@ -125,6 +128,7 @@ class SelfiesDataset(Dataset):
 
     def _get_data(self):
         # Divide the data into train and validation
+        torch.manual_seed(self.seed)
         total_length = sum(self.file_lengths)
         train_length = int(total_length * self.train_ratio)
         shuffle_idx = torch.randperm(total_length)
@@ -136,8 +140,9 @@ class SelfiesDataset(Dataset):
         total_lengths = 0
         for idx, file_path in enumerate(self.file_paths):
             # Loading the file
-            data = pd.read_csv(file_path, delimiter="\t")
-            data = data.dropna()
+            data = pd.read_csv(file_path, delimiter="\t", dtype={'features': str})
+            data = data.dropna(subset=self.attribute_columns)
+            data = data.dropna(subset=["selfies"])
             file_length = self.file_lengths[idx]
 
             if self.is_train_set:
@@ -185,3 +190,22 @@ class SelfiesDataset(Dataset):
             selfies=selfie_nop, vocab_stoi=self.symbol_to_idx, pad_to_len=self.pad_to_len + 2, enc_type="label"
         )
         return selfie_labels
+
+class SelfieGeneratorDataset(Dataset):
+    def __init__(self, z, conditions, max_selfie_len, symbol_to_index):
+        self.z = z
+        self.conditions = conditions
+        self.max_selfie_len = max_selfie_len
+        self.symbol_to_index = symbol_to_index
+    
+    def __len__(self):
+        return self.z.shape[0]
+    
+    def __getitem__(self, idx):
+        z = self.z[idx]
+        z = z.type(torch.float)
+        conditions = self.conditions[idx]
+        conditions = conditions.type(torch.float)
+        selfie_start = torch.ones([self.max_selfie_len]) * self.symbol_to_index["[nop]"]
+        selfie_start = selfie_start.type(torch.int64)
+        return z, selfie_start, conditions
