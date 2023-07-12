@@ -39,6 +39,24 @@ class RdkitAttributeCalculator:
 
         return [qed, logp, tpsa, weight, volume]
 
+    def calculate_non_volume(self, smile):
+        try:
+            molecule = Chem.MolFromSmiles(smile)
+            qed = Chem.QED.qed(molecule)
+            logp = Crippen.MolLogP(molecule)
+            tpsa = Chem.rdMolDescriptors.CalcTPSA(molecule)
+            weight = Descriptors.ExactMolWt(molecule)
+
+        except Exception:
+            # print("Error in calculating qed, tpsa, logp or weight attributes for smile: ", smile)
+            # print("Error: ", e)
+            qed = None
+            logp = None
+            tpsa = None
+            weight = None
+        
+        return [qed, logp, tpsa, weight]
+
     def add_all_to_file(
         self,
         dataframe,
@@ -56,6 +74,23 @@ class RdkitAttributeCalculator:
             dataframe[weight_column],
             dataframe[volume_column],
         ) = zip(*dataframe[smile_column].apply(lambda x: self.calculate_all(x)))
+        return dataframe
+
+    def add_non_volume_to_file(
+        self,
+        dataframe,
+        smile_column="smiles",
+        qed_column="qed",
+        logp_column="logp",
+        tpsa_column="tpsa",
+        weight_column="weight",
+    ):
+        (
+            dataframe[qed_column],
+            dataframe[logp_column],
+            dataframe[tpsa_column],
+            dataframe[weight_column],
+        ) = zip(*dataframe[smile_column].apply(lambda x: self.calculate_non_volume(x)))
         return dataframe
 
 

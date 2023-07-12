@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 
 from src.molgen.models.transformer import (
     FeedForward,
@@ -9,6 +10,8 @@ from src.molgen.models.transformer import (
     attention,
 )
 from src.molgen.models.utils import get_clones
+from src.molgen.data.dataset import SelfieGeneratorDataset
+from src.molgen.generation.methods import beam_search, greedy_search
 
 
 class PreLNEncoder(nn.Module):
@@ -78,7 +81,8 @@ class GCT(nn.Module):
         d_model,
         d_ff,
         d_latent_space,
-        n_mha_heads,
+        n_mha_heads_encoder,
+        n_mha_heads_decoder,
         dropout_p=0.1,
         normalizer_eps=1e-6,
         include_bias=False,
@@ -92,10 +96,10 @@ class GCT(nn.Module):
         self.attribute_embedder = nn.Linear(1, d_model, bias=False)
         self.positional_encoder = PositionalEncoder(d_model, max_selfie_len + 2, dropout_p)
         self.encoder_blocks = get_clones(
-            PreLNEncoder(d_model, n_mha_heads, attention, d_ff, dropout_p, normalizer_eps), n_encoder_blocks
+            PreLNEncoder(d_model, n_mha_heads_encoder, attention, d_ff, dropout_p, normalizer_eps), n_encoder_blocks
         )
         self.decoder_blocks = get_clones(
-            PreLNDecoder(d_model, n_mha_heads, attention, d_ff, dropout_p, normalizer_eps), n_decoder_blocks
+            PreLNDecoder(d_model, n_mha_heads_decoder, attention, d_ff, dropout_p, normalizer_eps), n_decoder_blocks
         )
 
         self.layer_norm1 = Normalizer(d_model, normalizer_eps)
@@ -183,41 +187,29 @@ class GCT(nn.Module):
         output = self.linear_output(decoder_selfie)
         return output, attribute_output, z, mu, logvar
 
-    # def generate(self, config, n_samples=16, device="cpu", method = "beam_search", z=None, conditions=None, scale_conditions=True):
-    #     if config.additional_metrics.scaling == "robustscaler":
-    #         scaler = joblib.load(config.additional_metrics.robust_scaler_path)
-    #     else:
-    #         assert 1 == 0, "In GCT Generate, implement other scaling methods than robustscaler if this is no longer used."
+    def generate(self, conditions, scaler, max_selfie_length, symbol_to_index, batch_size, config, n_samples=16, device="cpu", method = "beam_search", z=None, scale_conditions=True):
+        #If conditions should be scaled before generating (If a scalar was used during training and conditions input here are not scaled)
+        if scale_conditions and scaler != None:
+            conditions = torch.Tensor(scaler.transform(conditions)).to(device)
 
-    #     if type(conditions) == type(None):
-    #         conditions = torch.Tensor(get_random_conditions(n_samples, config)).to(device)
-    #         scale_conditions = False
-    #     else:
-    #         conditions = conditions.view(conditions.shape[0], -1)
-    #         if conditions.shape[1] == 1:
-    #             conditions = conditions.expand(-1, n_samples)
-    #             conditions = torch.transpose(conditions,0,1)
-    #     if scale_conditions:
-    #         conditions = torch.Tensor(scaler.transform(conditions)).to(device)
+        if z == None:
+            z_shape = [n_samples, max_selfie_length, self.d_latent_space]
+            mu = torch.zeros(z_shape).to(device)
+            logvar = torch.zeros(z_shape).to(device)
+            z = self.reparameterize(mu, logvar)
+        
+        dataset = SelfieGeneratorDataset(z, conditions, max_selfie_length, symbol_to_index)
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
-    #     if z == None:
-    #         z_shape = [n_samples, config.data.max_molecule_length + config.additional_metrics.n_metrics, self.d_latent_space]
-    #         mu = torch.zeros(z_shape).to(device)
-    #         logvar = torch.zeros(z_shape).to(device)
-    #         z = self.reparameterize(mu, logvar)
+        all_smiles = torch.zeros([n_samples, max_selfie_length]).to(device)
 
-    #     dataset = SmilesGeneratorDataset(z, conditions, config.data.max_molecule_length+1, self.smile_to_int)
-    #     dataloader = DataLoader(dataset, batch_size=config.gct.paper_batch_size, shuffle=False)
-
-    #     all_smiles = torch.zeros([n_samples, config.data.max_molecule_length])
-
-    #     for idx, (z_batch, trg_input, conditions_batch) in enumerate(dataloader):
-    #         z_batch = z_batch.to(device)
-    #         trg_input = trg_input.to(device)
-    #         conditions_batch = conditions_batch.to(device)
-    #         if method == "beam_search":
-    #             smiles = beam_search(self, z_batch, trg_input, conditions_batch, config.gct.beam_search_width, config.gct.beam_search_alpha, config)
-    #         elif method == "greedy_search":
-    #             smiles = greedy_search(self, z_batch, trg_input, conditions_batch, config)
-    #         all_smiles[idx*config.gct.paper_batch_size:(idx+1)*config.gct.paper_batch_size] = smiles
-    #     return all_smiles, z, conditions
+        for idx, (z_batch, trg_input, conditions_batch) in enumerate(dataloader):
+            z_batch = z_batch.to(device)
+            trg_input = trg_input.to(device)
+            conditions_batch = conditions_batch.to(device)
+            if method == "beam_search":
+                smiles = beam_search(self, z_batch, trg_input, conditions_batch, config.gct.beam_width, config.gct.beam_search_alpha, symbol_to_index, config)
+            elif method == "greedy_search":
+                smiles = greedy_search(self, z_batch, trg_input, conditions_batch)
+            all_smiles[idx*batch_size:(idx+1)*batch_size] = smiles
+        return all_smiles, z, conditions

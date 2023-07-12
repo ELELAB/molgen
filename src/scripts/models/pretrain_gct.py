@@ -3,6 +3,7 @@ import os
 
 import torch
 from omegaconf import DictConfig, OmegaConf
+from sklearn.preprocessing import StandardScaler
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -62,6 +63,16 @@ def main(config: DictConfig) -> None:
         data_dir, config.data.attribute_columns, index_to_symbol, symbol_to_index, max_selfie_length, is_train_set=False
     )
 
+    # Defining data scaler
+    scaler = StandardScaler()
+    scaler.fit(train_dataset.data[config.data.attribute_columns])
+
+    # Scale data
+    train_dataset.data[config.data.attribute_columns] = scaler.transform(
+        train_dataset.data[config.data.attribute_columns]
+    )
+    val_dataset.data[config.data.attribute_columns] = scaler.transform(val_dataset.data[config.data.attribute_columns])
+
     # Load dataloader
     trainloader = DataLoader(train_dataset, batch_size=config.gct.batch_size, shuffle=True)
     valloader = DataLoader(val_dataset, batch_size=config.gct.batch_size, shuffle=True)
@@ -78,7 +89,8 @@ def main(config: DictConfig) -> None:
         d_model=config.gct.d_model,
         d_ff=config.gct.d_ff,
         d_latent_space=config.gct.d_latent_space,
-        n_mha_heads=config.gct.n_mha_heads,
+        n_mha_heads_encoder=config.gct.n_mha_heads_encoder,
+        n_mha_heads_decoder=config.gct.n_mha_heads_decoder,
         dropout_p=config.gct.dropout,
         normalizer_eps=config.gct.normalizer_eps,
         include_bias=config.gct.include_bias,
@@ -156,7 +168,7 @@ def main(config: DictConfig) -> None:
     log_n_steps = config.wandb.log_n_steps
 
     # Training the model
-    for epoch in tqdm(range(config.gct.num_epochs-highest_epoch)):
+    for epoch in tqdm(range(config.gct.num_epochs - highest_epoch)):
         # Calculating the beta and gamma for the epoch for weighting the loss function
         beta = klannealer.calculate_beta(epoch)
         gamma = orthannealer.calculate_beta(epoch)
@@ -171,7 +183,6 @@ def main(config: DictConfig) -> None:
         for _idx, (src, trg_input, trg_output, attributes) in tqdm(
             enumerate(trainloader), leave=False, total=num_train_batches
         ):
-            
             # Getting batch size
             batch_size = src.shape[0]
 
@@ -242,10 +253,9 @@ def main(config: DictConfig) -> None:
                 "train_rce_loss": train_rce_loss / num_train_batches,
                 "train_kl_divergence": train_kl_divergence / num_train_batches,
                 "train_orthogonal_loss": train_orthogonal_loss / num_train_batches,
-                "train_accuracy": train_accuracy,
                 "train_beta": beta,
                 "train_gamma": gamma,
-                "train_epoch": epoch+highest_epoch,
+                "train_epoch": epoch + highest_epoch,
             }
         )
 
@@ -260,7 +270,6 @@ def main(config: DictConfig) -> None:
             for _idx, (src, trg_input, trg_output, attributes) in tqdm(
                 enumerate(valloader), leave=False, total=num_val_batches
             ):
-                
                 # Getting batch size
                 batch_size = src.shape[0]
 
@@ -311,10 +320,9 @@ def main(config: DictConfig) -> None:
                 "val_rce_loss": val_rce_loss / num_val_batches,
                 "val_kl_divergence": val_kl_divergence / num_val_batches,
                 "val_orthogonal_loss": val_orthogonal_loss / num_val_batches,
-                "val_accuracy": val_accuracy,
                 "val_beta": beta,
                 "val_gamma": gamma,
-                "val_epoch": epoch+highest_epoch,
+                "val_epoch": epoch + highest_epoch,
             }
         )
 
