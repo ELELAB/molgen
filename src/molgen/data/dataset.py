@@ -77,7 +77,7 @@ class SelfiesDataset(Dataset):
         selfie_labels = torch.Tensor(self.selfie_to_labels(selfie)).type(torch.int64)
 
         # Getting the attributes
-        attributes = torch.Tensor(row[self.attribute_columns]).type(torch.float)
+        attributes = torch.Tensor(row[self.attribute_columns]).type(torch.float32)
 
         # Making the src, trg_input and trg_output for the transformer
         src = selfie_labels[1:-1]  # Removing the [nop] tokens from the start and end
@@ -174,6 +174,9 @@ class SelfiesDataset(Dataset):
         # Concatenating the dataframes
         all_data = pd.concat(all_data)
 
+        # Resetting the index
+        all_data = all_data.reset_index(drop=True)
+
         return all_data
 
     def selfie_to_onehot(self, selfie):
@@ -207,9 +210,9 @@ class SelfieGeneratorDataset(Dataset):
 
     def __getitem__(self, idx):
         z = self.z[idx]
-        z = z.type(torch.float)
+        z = z.type(torch.float32)
         conditions = self.conditions[idx]
-        conditions = conditions.type(torch.float)
+        conditions = conditions.type(torch.float32)
         selfie_start = torch.ones([self.max_selfie_len]) * self.symbol_to_index["[nop]"]
         selfie_start = selfie_start.type(torch.int64)
         return z, selfie_start, conditions
