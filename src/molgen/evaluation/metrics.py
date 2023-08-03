@@ -1,32 +1,33 @@
-import selfies as sf
+import numpy as np
+import pandas as pd
+import torch
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.DataStructs import TanimotoSimilarity
-import numpy as np
-import pandas as pd
+
 from src.molgen.data.attribute_calculators import (
     JazzyAttributeCalculator,
     RdkitAttributeCalculator,
     SAScorerAttributeCalculator,
 )
-import torch
+
 
 def calculate_validity(generated_smiles):
     # Checking validity of smiles
     valid_smiles = []
     for smile in generated_smiles:
-        if Chem.MolFromSmiles(smile) != None:
+        if Chem.MolFromSmiles(smile) is not None:
             valid_smiles.append(smile)
-    
+
     validity = len(valid_smiles) / len(generated_smiles)
 
     return validity
 
-def calculate_uniqueness(generated_smiles):
 
+def calculate_uniqueness(generated_smiles):
     fingerprints = set()
     unique_molecules = []
-    
+
     for molecule in generated_smiles:
         mol = Chem.MolFromSmiles(molecule)
         if mol is not None:
@@ -35,10 +36,11 @@ def calculate_uniqueness(generated_smiles):
             if fingerprint_str not in fingerprints:
                 fingerprints.add(fingerprint_str)
                 unique_molecules.append(molecule)
-    
+
     uniqueness_score = len(unique_molecules) / len(generated_smiles)
 
     return uniqueness_score
+
 
 def calculate_similarity(generated_smiles, training_smiles):
     gen_similarities = []
@@ -46,7 +48,7 @@ def calculate_similarity(generated_smiles, training_smiles):
         generated_mol = Chem.MolFromSmiles(molecule)
         if generated_mol is None:
             continue
-        
+
         generated_fp = AllChem.GetMorganFingerprintAsBitVect(generated_mol, 2, nBits=1024)  # Circular fingerprint
 
         similarities = []
@@ -56,14 +58,17 @@ def calculate_similarity(generated_smiles, training_smiles):
                 training_fp = AllChem.GetMorganFingerprintAsBitVect(training_mol, 2, nBits=1024)  # Circular fingerprint
                 similarity = TanimotoSimilarity(generated_fp, training_fp)
                 similarities.append(similarity)
-        
+
         if similarities:
             max_similarity = max(similarities)
             gen_similarities.append(max_similarity)
 
-    return np.mean(gen_similarities) 
+    return np.mean(gen_similarities)
+
 
 def calculate_attribute_accuracy(generated_smiles, target_conditions, config, scaler=None):
+    # Getting device
+    device = target_conditions.device
 
     # Defining the attribute calculators
     rdkit_attribute_calculator = RdkitAttributeCalculator()
@@ -78,7 +83,7 @@ def calculate_attribute_accuracy(generated_smiles, target_conditions, config, sc
         generated_smiles_df = rdkit_attribute_calculator.add_all_to_file(
             generated_smiles_df, smile_column="smiles"
         )  # Takes 0.004 seconds per molecule for qed, logp, tpsa, weight, but 0.25 for volume
-    else: 
+    else:
         generated_smiles_df = rdkit_attribute_calculator.add_non_volume_to_file(
             generated_smiles_df, smile_column="smiles"
         )
@@ -96,30 +101,40 @@ def calculate_attribute_accuracy(generated_smiles, target_conditions, config, sc
 
     # Getting relevant conditions
     generated_smiles_conditions = generated_smiles_df[config.data.attribute_columns].values
-    non_nan_idx = np.sum(generated_smiles_conditions == None, axis=1) == 0
+    try:
+        non_nan_idx = np.sum(np.isnan(generated_smiles_conditions), axis=1) == 0
+    except TypeError:
+        non_nan_idx = np.sum(generated_smiles_conditions is None, axis=1) == 0
 
     # Removing nan values
     generated_smiles_conditions = generated_smiles_conditions[non_nan_idx]
     target_conditions = target_conditions[non_nan_idx]
 
     if sum(non_nan_idx) == 0:
-        return 1000000
+        return 1000000, 0, generated_smiles_conditions
     # Scaling the conditions
     if scaler is not None:
         # Calculating the accuracy
-        generated_smiles_conditions = torch.Tensor(scaler.transform(generated_smiles_conditions))
+        generated_smiles_conditions = torch.Tensor(scaler.transform(generated_smiles_conditions)).to(device)
         attribute_accuracy = torch.mean(torch.abs(generated_smiles_conditions - target_conditions))
-    else: 
+    else:
         # Calculating the accuracy
-        attribute_accuracy = torch.mean(torch.abs(generated_smiles_conditions - target_conditions) / torch.max(target_conditions, axis=0)[0])
+        generated_smiles_conditions = torch.Tensor(generated_smiles_conditions).to(device)
+        attribute_accuracy = torch.mean(
+            torch.abs(generated_smiles_conditions - target_conditions) / torch.max(target_conditions, axis=0)[0]
+        )
 
-    return attribute_accuracy
+    # Calculate validity, where it was possible to calculate the attributes
+    validity = sum(non_nan_idx) / len(non_nan_idx)
+
+    return attribute_accuracy.item(), validity, generated_smiles_conditions
+
 
 def calculate_novelty(generated_molecules, reference_molecules):
     unique_generated = set(generated_molecules)
     unique_reference = set(reference_molecules)
-    
+
     novel_molecules = unique_generated - unique_reference
     novelty = len(novel_molecules) / len(unique_generated)
-    
+
     return novelty

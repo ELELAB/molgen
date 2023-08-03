@@ -13,21 +13,13 @@ def make_padding_mask(x, padding_idx, n_conditions=0):
     device = x.device
 
     # Make mask of shape (batch_size, seq_len)
-    mask = torch.ones_like(x, dtype=bool).to(device)
-
-    # Find first occurence of padding_int in x
-    padding_mask = torch.eq(x, padding_idx)
-    first_padding_idx = mask.shape[1] - torch.sum(padding_mask, axis=1) + 1
-
-    # Set all elements of mask after first padding int for each selfie to 0
-    for i in range(x.shape[0]):
-        mask[i, first_padding_idx[i] + 1 :] = 0
+    mask = (x != padding_idx).unsqueeze(-2).to(device)
+    mask[:, :, 0] = True
 
     # Add n_conditions columns to the start of the mask
     if n_conditions > 0:
-        condition_mask = torch.ones([x.shape[0], n_conditions]).to(device)
-        mask = torch.cat([condition_mask, mask], axis=1)
-    mask = mask.unsqueeze(-2)
+        condition_mask = torch.ones([x.shape[0], n_conditions], dtype=bool).unsqueeze(-2).to(device)
+        mask = torch.cat([condition_mask, mask], axis=2)
     return mask
 
 
@@ -41,9 +33,11 @@ def make_nopeak_mask(batch_size, device="cpu", dimension=80, n_conditions=0):
     # Add n_conditions columns to the left and top of the mask
     if n_conditions > 0:
         final_mask = torch.ones([batch_size, dimension + n_conditions, dimension + n_conditions])
+        final_mask[:, :, n_conditions:] = 0
         final_mask[:, n_conditions:, n_conditions:] = mask
     else:
         final_mask = mask
+
     return final_mask.to(device)
 
 

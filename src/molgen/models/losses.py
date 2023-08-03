@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn.functional as F
 from rdkit import Chem
@@ -9,10 +10,12 @@ class LossFunction:
         self.padding_int = padding_int
         self.n_attributes = n_attributes
 
-    def pretrain_loss(self, smile_prediction_p, smile_target, beta, gamma, mu, log_var):
+    def pretrain_loss(
+        self, smile_prediction_p, smile_target, beta, gamma, theta, mu, log_var, attributes, attributes_pred
+    ):
         """
         Loss used in the GCT paper. This is a combination of cross_entropy and kl_divergence.
-        loss = cross_entropy + beta * kl_divergence + gamma * orthogonal_loss
+        loss = cross_entropy + beta * kl_divergence + gamma * orthogonal_loss + attribute_loss
             - kl_divergence is the part which makes sure that encoder outputs of mean/variance follows a ~Norm(0,1) distribution
             - cross_entropy is the part that makes the model output smiles.
         """
@@ -32,7 +35,7 @@ class LossFunction:
         cov_matrix = torch.matmul(latent_std.unsqueeze(-1), latent_std.unsqueeze(-2))
         gram_matrix = torch.matmul(mu.unsqueeze(-1), mu.unsqueeze(-2))
 
-        #Splitting calculation up to avoid memory error
+        # Splitting calculation up to avoid memory error
         chunk_size = 50  # Define the size of each chunk
         total_chunks = (cov_matrix.size(-1) // chunk_size) + 1
 
@@ -47,10 +50,13 @@ class LossFunction:
 
         orthogonal_loss = torch.cat(norms, dim=-1).mean()
 
-        # Final loss where kl_divergence is weighted by beta, to make sure it does not take over too soon.
-        loss = smile_rce_loss + beta * kl_divergence + gamma * orthogonal_loss
+        # Calculating attribute loss
+        attribute_loss = F.mse_loss(attributes_pred, attributes, reduction="mean")
 
-        return loss, smile_rce_loss, kl_divergence, orthogonal_loss
+        # Final loss where kl_divergence is weighted by beta, to make sure it does not take over too soon.
+        loss = smile_rce_loss + beta * kl_divergence + gamma * orthogonal_loss + theta * attribute_loss
+
+        return loss, smile_rce_loss, kl_divergence, orthogonal_loss, attribute_loss
 
     def finetune_loss(
         self,
@@ -111,3 +117,73 @@ class LossFunction:
         loss = attribute_weight * attribute_loss + diversity_weight * diversity_loss
 
         return loss, attribute_loss, diversity_loss
+
+
+class StyleclipLoss:
+    def __init__(
+        self,
+        target_attributes,
+        target_weighting,
+        attribute_columns,
+        attribute_min_values,
+        attribute_max_values,
+        scaler=None,
+        device="cpu",
+    ):
+        self.target_attributes = np.array([target_attributes[attribute] for attribute in attribute_columns])
+        self.target_weighting = np.array([target_weighting[attribute] for attribute in attribute_columns])
+        self.attribute_columns = np.array(attribute_columns)
+        self.scaler = scaler
+        if self.scaler is not None:
+            target_attribute_copy = self.target_attributes.copy()
+            target_attribute_copy[self.target_attributes == "max"] = 0
+            target_attribute_copy[self.target_attributes == "min"] = 0
+            self.target_attributes_scaled = self.scaler.transform(
+                target_attribute_copy.reshape(-1, target_attribute_copy.shape[0])
+            ).flatten()
+            self.target_attributes_scaled[self.target_attributes == "max"] = attribute_max_values[
+                self.target_attributes == "max"
+            ]
+            self.target_attributes_scaled[self.target_attributes == "min"] = attribute_min_values[
+                self.target_attributes == "min"
+            ]
+        else:
+            self.target_attributes_scaled = self.target_attributes
+        self.target_attributes_scaled = torch.from_numpy(self.target_attributes_scaled).type(torch.float32).to(device)
+        self.target_weighting = torch.from_numpy(self.target_weighting).type(torch.float32).to(device)
+
+    def loss(self, generated_attributes):
+        """
+        Outputs the loss of the generated attributes compared to the target attributes.
+        """
+        loss = 0
+        for i, _attribute in enumerate(self.attribute_columns):
+            target_value = self.target_attributes_scaled[i]
+            weight = self.target_weighting[i]
+            if target_value == "max":
+                loss -= torch.mean(generated_attributes[:, i]) * weight
+            elif target_value == "min":
+                loss += torch.mean(generated_attributes[:, i]) * weight
+            else:
+                loss += torch.mean(torch.abs(generated_attributes[:, i] - float(target_value))) * weight
+        return loss
+
+
+class LossFunctionCTD:
+    def __init__(self, padding_int, n_attributes=0):
+        self.padding_int = padding_int
+        self.n_attributes = n_attributes
+
+    def pretrain_loss(self, smile_prediction_p, smile_target):
+        """
+        Loss used for the CTD model. This only contains the cross entropy loss.
+        """
+
+        # Making smile prediction vector 2 dimensional. (merges all elements from all smiles in batch).
+        smile_prediction_p = smile_prediction_p.contiguous().view(-1, smile_prediction_p.shape[-1])
+        smile_target = smile_target.view(-1)
+
+        # Calculating cross entropy loss (Reconstruction loss)
+        smile_rce_loss = F.cross_entropy(smile_prediction_p, smile_target, reduction="mean")
+
+        return smile_rce_loss
