@@ -4,7 +4,6 @@ import os
 import torch
 from omegaconf import DictConfig, OmegaConf
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from torch.utils.data import DataLoader
 
 import wandb
 from src.molgen.data.dataset import SelfiesDataset
@@ -86,14 +85,6 @@ def main(config: DictConfig) -> None:
         val_dataset.data.loc[:, config.data.attribute_columns] = scaler.transform(
             val_dataset.data[config.data.attribute_columns]
         )
-
-    # Load dataloader
-    DataLoader(
-        train_dataset, batch_size=config.gct.batch_size, shuffle=True, num_workers=config.training.data_loader_workers
-    )
-    DataLoader(
-        val_dataset, batch_size=config.gct.batch_size, shuffle=True, num_workers=config.training.data_loader_workers
-    )
 
     # Number of conditions/attributes
     n_conditions = len(config.data.attribute_columns)

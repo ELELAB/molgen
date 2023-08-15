@@ -27,8 +27,8 @@ def greedy_search(model, z, trg_input, conditions, symbol_to_index):
     OUTPUT:
         generated_smiles: TENSOR: A Tensor containing the generated smiles molecules.
     """
-    n_elements = z.shape[0]
-    device = z.device
+    n_elements = trg_input.shape[0]
+    device = trg_input.device
     generated_smiles = copy.deepcopy(trg_input)
     eos_not_reached = torch.ones(n_elements, dtype=bool)
 
@@ -36,11 +36,15 @@ def greedy_search(model, z, trg_input, conditions, symbol_to_index):
     # Making the masks for the decoder.
     # Defining the masks
     src_mask = None
-    if model.include_conditions_decoder:
-        trg_no_peak_mask = make_nopeak_mask(
-            1, device=device, dimension=trg_input.shape[1], n_conditions=conditions.shape[-1]
-        )
-        trg_padding_mask = make_padding_mask(trg_input, symbol_to_index["[nop]"], n_conditions=conditions.shape[-1])
+    if z is not None:
+        if model.include_conditions_decoder:
+            trg_no_peak_mask = make_nopeak_mask(
+                1, device=device, dimension=trg_input.shape[1], n_conditions=conditions.shape[-1]
+            )
+            trg_padding_mask = make_padding_mask(trg_input, symbol_to_index["[nop]"], n_conditions=conditions.shape[-1])
+        else:
+            trg_no_peak_mask = make_nopeak_mask(1, device=device, dimension=trg_input.shape[1], n_conditions=0)
+            trg_padding_mask = make_padding_mask(trg_input, symbol_to_index["[nop]"], n_conditions=0)
     else:
         trg_no_peak_mask = make_nopeak_mask(1, device=device, dimension=trg_input.shape[1], n_conditions=0)
         trg_padding_mask = make_padding_mask(trg_input, symbol_to_index["[nop]"], n_conditions=0)
@@ -50,8 +54,14 @@ def greedy_search(model, z, trg_input, conditions, symbol_to_index):
     # Iterating and generating a new element untill an eos token has been generated for each of the smiles in the batch
     for i in range(1, trg_input.shape[1]):
         # Getting decoder output, logits, and finding next element
-        decoder_out = model.decode(generated_smiles, conditions.unsqueeze(-1), z, src_mask=src_mask, trg_mask=trg_mask)
-        decoder_selfie = decoder_out[:, conditions.shape[1] :] if model.include_conditions_decoder else decoder_out
+        if z is not None:
+            decoder_out = model.decode(
+                generated_smiles, conditions.unsqueeze(-1), z, src_mask=src_mask, trg_mask=trg_mask
+            )
+            decoder_selfie = decoder_out[:, conditions.shape[1] :] if model.include_conditions_decoder else decoder_out
+        else:
+            decoder_out = model.decode(generated_smiles, conditions.unsqueeze(-1), src_mask=src_mask, trg_mask=trg_mask)
+            decoder_selfie = decoder_out
         output = model.linear_output(decoder_selfie)
         logits = output[:, i - 1, :]
         elements = torch.argmax(logits, dim=1)
@@ -67,7 +77,7 @@ def greedy_search(model, z, trg_input, conditions, symbol_to_index):
     return generated_smiles
 
 
-def beam_search(model, z, trg_input, conditions, width, alpha, symbol_to_index):
+def beam_search(model, z, trg_input, conditions, width, alpha, symbol_to_index):  # noqa: C901
     """
     DESCRIPTION:
         This function peforms the refined beam search algorithm to generated smile molecules.
@@ -97,26 +107,32 @@ def beam_search(model, z, trg_input, conditions, width, alpha, symbol_to_index):
     """
 
     # Width cant be bigger than vocab_size
-    n_elements = z.shape[0]
-    device = z.device
+    n_elements = trg_input.shape[0]
+    device = trg_input.device
     generated_smiles = torch.zeros([trg_input.shape[0], trg_input.shape[1]])
 
     for element in range(n_elements):
         # Extracting the current values of z, input and conditions
-        current_z = z[element].view(-1, z.shape[1], z.shape[2])
+        current_z = z[element].view(-1, z.shape[1], z.shape[2]) if z is not None else None
         current_trg_input = trg_input[element].view(-1, trg_input.shape[-1])
         current_condition = conditions[element].view(-1, conditions.shape[-1])
 
         # Making the masks for the decoder.
         # Defining the masks
         src_mask = None
-        if model.include_conditions_decoder:  # TRG MASK BLIVER FORKERT SIZE bliver 16 x istedet for 1 x
-            trg_no_peak_mask = make_nopeak_mask(
-                1, device=device, dimension=current_trg_input.shape[1], n_conditions=conditions.shape[-1]
-            )
-            trg_padding_mask = make_padding_mask(
-                current_trg_input, symbol_to_index["[nop]"], n_conditions=conditions.shape[-1]
-            )
+        if z is not None:
+            if model.include_conditions_decoder:
+                trg_no_peak_mask = make_nopeak_mask(
+                    1, device=device, dimension=current_trg_input.shape[1], n_conditions=conditions.shape[-1]
+                )
+                trg_padding_mask = make_padding_mask(
+                    current_trg_input, symbol_to_index["[nop]"], n_conditions=conditions.shape[-1]
+                )
+            else:
+                trg_no_peak_mask = make_nopeak_mask(
+                    1, device=device, dimension=current_trg_input.shape[1], n_conditions=0
+                )
+                trg_padding_mask = make_padding_mask(current_trg_input, symbol_to_index["[nop]"], n_conditions=0)
         else:
             trg_no_peak_mask = make_nopeak_mask(1, device=device, dimension=current_trg_input.shape[1], n_conditions=0)
             trg_padding_mask = make_padding_mask(current_trg_input, symbol_to_index["[nop]"], n_conditions=0)
@@ -124,10 +140,20 @@ def beam_search(model, z, trg_input, conditions, width, alpha, symbol_to_index):
         trg_mask = torch.logical_and(trg_no_peak_mask, trg_padding_mask)
 
         # Getting the logits of the first element
-        decoder_out = model.decode(
-            current_trg_input, current_condition.unsqueeze(-1), current_z, src_mask=src_mask, trg_mask=trg_mask
-        )
-        logits_first_element = model.linear_output(decoder_out)[0, 0, :]
+        if z is not None:
+            decoder_out = model.decode(
+                current_trg_input, current_condition.unsqueeze(-1), current_z, src_mask=src_mask, trg_mask=trg_mask
+            )
+            if model.include_conditions_decoder:
+                decoder_selfie = decoder_out[:, current_condition.shape[1] :]
+            else:
+                decoder_selfie = decoder_out
+        else:
+            decoder_out = model.decode(
+                current_trg_input, current_condition.unsqueeze(-1), src_mask=src_mask, trg_mask=trg_mask
+            )
+            decoder_selfie = decoder_out
+        logits_first_element = model.linear_output(decoder_selfie)[0, 0, :]
 
         # Getting the top k elements and converting the probabilities to log probabilities
         output_probabilities = F.softmax(logits_first_element, dim=-1)
@@ -139,7 +165,8 @@ def beam_search(model, z, trg_input, conditions, width, alpha, symbol_to_index):
         current_trg_input[:, 1] = best_elements
 
         # Expanding z and conditions vector to have them "width" times, this is necessary to run all trg_input through decoder at the same time.
-        current_z = current_z.expand(width, -1, -1) + 0
+        if z is not None:
+            current_z = current_z.expand(width, -1, -1) + 0
         current_condition = current_condition.expand(width, -1) + 0
 
         # Making vectors to keep track of which elements have reached the end and theirs lengths until the <eos> token.
@@ -149,13 +176,19 @@ def beam_search(model, z, trg_input, conditions, width, alpha, symbol_to_index):
         for i in range(2, trg_input.shape[1]):
             # Making masks for the decoder.
             src_mask = None
-            if model.include_conditions_decoder:
-                trg_no_peak_mask = make_nopeak_mask(
-                    width, device=device, dimension=current_trg_input.shape[1], n_conditions=conditions.shape[-1]
-                )
-                trg_padding_mask = make_padding_mask(
-                    current_trg_input, symbol_to_index["[nop]"], n_conditions=conditions.shape[-1]
-                )
+            if z is not None:
+                if model.include_conditions_decoder:
+                    trg_no_peak_mask = make_nopeak_mask(
+                        width, device=device, dimension=current_trg_input.shape[1], n_conditions=conditions.shape[-1]
+                    )
+                    trg_padding_mask = make_padding_mask(
+                        current_trg_input, symbol_to_index["[nop]"], n_conditions=conditions.shape[-1]
+                    )
+                else:
+                    trg_no_peak_mask = make_nopeak_mask(
+                        width, device=device, dimension=current_trg_input.shape[1], n_conditions=0
+                    )
+                    trg_padding_mask = make_padding_mask(current_trg_input, symbol_to_index["[nop]"], n_conditions=0)
             else:
                 trg_no_peak_mask = make_nopeak_mask(
                     width, device=device, dimension=current_trg_input.shape[1], n_conditions=0
@@ -165,13 +198,21 @@ def beam_search(model, z, trg_input, conditions, width, alpha, symbol_to_index):
             trg_mask = torch.logical_and(trg_no_peak_mask, trg_padding_mask)
 
             # Getting the logits of the next output and converting to log probility and adding to the current logp for the smile.
-            decoder_out = model.decode(
-                current_trg_input, current_condition.unsqueeze(-1), current_z, src_mask=src_mask, trg_mask=trg_mask
-            )
-            if model.include_conditions_decoder:
-                decoder_selfie = decoder_out[:, current_condition.shape[1] :]
+            if z is not None:
+                decoder_out = model.decode(
+                    current_trg_input, current_condition.unsqueeze(-1), current_z, src_mask=src_mask, trg_mask=trg_mask
+                )
+
+                if model.include_conditions_decoder:
+                    decoder_selfie = decoder_out[:, current_condition.shape[1] :]
+                else:
+                    decoder_selfie = decoder_out
             else:
+                decoder_out = model.decode(
+                    current_trg_input, current_condition.unsqueeze(-1), src_mask=src_mask, trg_mask=trg_mask
+                )
                 decoder_selfie = decoder_out
+
             output = model.linear_output(decoder_selfie)
             logits = output[:, i - 1, :]
             output_probabilities = F.softmax(logits, dim=-1)

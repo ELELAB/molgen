@@ -206,13 +206,16 @@ class SelfieGeneratorDataset(Dataset):
         self.symbol_to_index = symbol_to_index
 
     def __len__(self):
-        return self.z.shape[0]
+        return self.conditions.shape[0]
 
     def __getitem__(self, idx):
-        z = self.z[idx]
-        z = z.type(torch.float32)
         conditions = self.conditions[idx]
         conditions = conditions.type(torch.float32)
         selfie_start = torch.ones([self.max_selfie_len]) * self.symbol_to_index["[nop]"]
         selfie_start = selfie_start.type(torch.int64)
-        return z, selfie_start, conditions
+        if self.z is not None:
+            z = self.z[idx]
+            z = z.type(torch.float32)
+            return z, selfie_start, conditions
+        else:
+            return selfie_start, conditions

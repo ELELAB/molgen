@@ -8,7 +8,6 @@ from rdkit.Chem import Draw
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import wandb
@@ -91,14 +90,6 @@ def main(config: DictConfig) -> None:  # noqa: C901
             val_dataset.data[config.data.attribute_columns]
         )
 
-    # Load dataloader
-    DataLoader(
-        train_dataset, batch_size=config.gct.batch_size, shuffle=True, num_workers=config.training.data_loader_workers
-    )
-    DataLoader(
-        val_dataset, batch_size=config.gct.batch_size, shuffle=True, num_workers=config.training.data_loader_workers
-    )
-
     # Number of conditions/attributes
     n_conditions = len(config.data.attribute_columns)
 
@@ -140,10 +131,8 @@ def main(config: DictConfig) -> None:  # noqa: C901
     # Getting the initial latent space vector
     if config.styleclip.z_initialization_method == "sample":
         z = torch.randn(1, max_selfie_length, config.gct.d_latent_space).to(device)
-        z = z.detach().clone().requires_grad_()
     elif config.styleclip.z_initialization_method == "zero":
         z = torch.zeros(1, max_selfie_length, config.gct.d_latent_space).to(device)
-        z = z.detach().clone().requires_grad_()
     elif config.styleclip.z_initialization_method == "molecule":
         smile = config.styleclip.initial_molecule
         if smile in train_dataset.data["smiles"].values:
@@ -161,11 +150,11 @@ def main(config: DictConfig) -> None:  # noqa: C901
 
         # Getting z
         z, _, _ = model.encode(src.unsqueeze(0), attributes.unsqueeze(-1))
-
-        # Making z a leaf variable
-        z = z.detach().clone().requires_grad_()
     else:
         raise ValueError(f"Unknown z initialization method: {config.styleclip.z_initialization_method}")
+
+    # Converting z to make it trainable
+    z = torch.nn.Parameter(z, requires_grad=True)
 
     # Initial
     # Defining the wandb logger to track the training
@@ -194,8 +183,8 @@ def main(config: DictConfig) -> None:  # noqa: C901
     scheduler = ReduceLROnPlateau(
         optimizer,
         mode="min",
-        factor=config.gct.lr_scheduler_factor,
-        patience=5,
+        factor=config.styleclip.lr_mul_factor,
+        patience=config.styleclip.lr_patience,
         verbose=True,
         min_lr=config.gct.lr_schedule_min_lr,
     )
@@ -252,6 +241,9 @@ def main(config: DictConfig) -> None:  # noqa: C901
         # If the loss is not improving, reduce the learning rate
         scheduler.step(loss)
 
+        # Log the loss
+        wandb_run.log({"loss": loss.item()}, step=epoch)
+
         # Log the generated molecule and its attributes
         if epoch % config.styleclip.log_each_n_iters == 0:
             # Log metrics
@@ -266,7 +258,7 @@ def main(config: DictConfig) -> None:  # noqa: C901
             # Backtransform the target attributes
             if scaler is not None:
                 target_attributes_scaled_inverse = scaler.inverse_transform(target_attributes_scaled.cpu().numpy())
-                target_attributes_scaled_inverse = torch.Tensor(target_attributes_scaled_inverse).to(device)
+                target_attributes_scaled_inverse = torch.Tensor(target_attributes_scaled_inverse)
 
             # Calculate metrics
             accuracy, _, real_generated_conditions = calculate_attribute_accuracy(
@@ -278,17 +270,25 @@ def main(config: DictConfig) -> None:  # noqa: C901
             molecule_image = Draw.MolToImage(mol)
             molecule_image = wandb.Image(molecule_image)
 
+            # Attributes predictions backtransformed
+            if scaler is not None:
+                attributes_z_backscaled = scaler.inverse_transform(attributes_z.detach().cpu().numpy())
+                attributes_z_backscaled = torch.Tensor(attributes_z_backscaled)
+
             # Log metrics and image
             log_dict = {}
             log_dict["smile"] = molecules_generated_smiles[0]
             log_dict["generated_molecule"] = molecule_image
             log_dict["accuracy"] = accuracy
             log_dict["loss"] = loss.item()
+            log_dict["epoch"] = epoch
             for i, attribute in enumerate(scaler.get_feature_names_out()):
                 if len(real_generated_conditions) == 0:
                     log_dict[attribute] = None
                 else:
-                    log_dict[attribute] = real_generated_conditions[0, i].item()
+                    log_dict[attribute] = real_generated_conditions[attribute][0]
+                log_dict[f"pred_{attribute}"] = attributes_z_backscaled[0, i].item()
+                log_dict[f"target_{attribute}"] = target_attributes_scaled_inverse[0, i].item()
             wandb_run.log(log_dict, step=epoch)
 
 

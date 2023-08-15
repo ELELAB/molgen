@@ -187,3 +187,22 @@ class LossFunctionCTD:
         smile_rce_loss = F.cross_entropy(smile_prediction_p, smile_target, reduction="mean")
 
         return smile_rce_loss
+
+
+class AttributeLoss:
+    def __init__(self, attribute_columns, attribute_weights, device="cpu"):
+        self.attribute_columns = attribute_columns
+        self.attribute_weights = torch.Tensor(attribute_weights).view(-1, len(attribute_weights)).to(device)
+
+    def loss(self, attributes_pred, attributes):
+        """
+        Loss used to train the attribute predictor.
+        """
+
+        # Calculating attribute loss
+        attribute_loss = F.mse_loss(attributes_pred, attributes, reduction="none")
+
+        # Final loss, weighting the attribute loss
+        attribute_loss = torch.mean(attribute_loss * self.attribute_weights)
+
+        return attribute_loss
