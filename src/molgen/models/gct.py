@@ -350,6 +350,12 @@ class GCT(nn.Module):
 
         #     return smiles, z, conditions
 
+    def return_decoder_out(self, smile, target_input, conditions, src_mask=None, trg_mask=None):
+        conditions = conditions.unsqueeze(-1)
+        z, mu, logvar = self.encode(smile, conditions, src_mask)
+        decoder_out = self.decode(target_input, conditions, z, src_mask, trg_mask)
+        return decoder_out
+
 
 class ConditionalTransformer(nn.Module):
     def __init__(
@@ -567,3 +573,60 @@ class ConditionalTransformer(nn.Module):
         #         smiles = greedy_search(self, z, trg_input, conditions, symbol_to_index, config)
 
         #     return smiles, z, conditions
+
+
+class AttributePredictor(nn.Module):
+    """
+    This model takes the output of the transformer decoder and predicts the attributes that the molecule would have from these.
+    """
+
+    def __init__(
+        self,
+        max_selfie_len,
+        n_alphabet_elements,
+        n_encoder_blocks,
+        d_model,
+        d_ff,
+        n_mha_heads_encoder,
+        dropout_p=0.1,
+        normalizer_eps=1e-6,
+        include_bias=False,
+        n_attributes=9,
+    ):
+        super().__init__()
+
+        # Defining the encoder blocks
+        self.encoder_blocks = get_clones(
+            PreLNEncoder(d_model, n_mha_heads_encoder, attention, d_ff, dropout_p, normalizer_eps), n_encoder_blocks
+        )
+
+        # Defining the first layer norm
+        self.layer_norm1 = Normalizer(d_model, normalizer_eps)
+
+        # Defining the linear layer predicting the attributes from the output of the encoder
+        self.linear_attributes_encoder = nn.Linear(d_model * max_selfie_len, n_attributes, bias=include_bias)
+
+        # Saving the number of attributes
+        self.n_attributes = n_attributes
+
+        # Initializing the weights
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        else:
+            for p in module.parameters():
+                if p.dim() > 1:
+                    nn.init.xavier_uniform_(p)
+
+    def forward(self, decoder_out, src_mask=None):
+        for i in range(len(self.encoder_blocks)):
+            decoder_out = self.encoder_blocks[i](decoder_out, src_mask)
+
+        decoder_out = self.layer_norm1(decoder_out)
+
+        attributes_pred = self.linear_attributes_encoder(decoder_out[:, :-1, :].view(decoder_out.shape[0], -1))
+
+        return attributes_pred

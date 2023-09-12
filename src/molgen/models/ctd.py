@@ -148,26 +148,17 @@ class ConditionalTransformerDecoder(nn.Module):
         scale_conditions=True,
     ):
         # If conditions should be scaled before generating (If a scalar was used during training and conditions input here are not scaled)
-        NotImplementedError("Not implemented yet")
-
         if scale_conditions and scaler is not None:
             conditions = torch.Tensor(scaler.transform(conditions)).to(device)
 
-        if z is None:
-            z_shape = [n_samples, max_selfie_length, self.d_latent_space]
-            mu = torch.zeros(z_shape).to(device)
-            logvar = torch.zeros(z_shape).to(device)
-            z = self.reparameterize(mu, logvar)
-
-        dataset = SelfieGeneratorDataset(z, conditions, max_selfie_length, symbol_to_index)
+        dataset = SelfieGeneratorDataset(None, conditions, max_selfie_length, symbol_to_index)
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
         all_smiles = torch.zeros([n_samples, max_selfie_length]).to(device)
 
         self.eval()
 
-        for idx, (z_batch, trg_input, conditions_batch) in enumerate(dataloader):
-            z_batch = z_batch.to(device)
+        for idx, (trg_input, conditions_batch) in enumerate(dataloader):
             trg_input = trg_input.to(device)
             conditions_batch = conditions_batch.to(device)
 
@@ -175,7 +166,7 @@ class ConditionalTransformerDecoder(nn.Module):
                 if method == "beam_search":
                     smiles = beam_search(
                         self,
-                        z_batch,
+                        None,
                         trg_input,
                         conditions_batch,
                         config.gct.beam_width,
@@ -183,7 +174,7 @@ class ConditionalTransformerDecoder(nn.Module):
                         symbol_to_index,
                     )
                 elif method == "greedy_search":
-                    smiles = greedy_search(self, z_batch, trg_input, conditions_batch, symbol_to_index)
+                    smiles = greedy_search(self, None, trg_input, conditions_batch, symbol_to_index)
             all_smiles[idx * batch_size : (idx + 1) * batch_size] = smiles
         return all_smiles, z, conditions
 
